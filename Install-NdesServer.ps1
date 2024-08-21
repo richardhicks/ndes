@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 1.3.9
+.VERSION 1.3.11
 
 .GUID a52391cf-9c38-4304-8c9b-89f151461f3c
 
@@ -16,7 +16,7 @@
 
 .PROJECTURI https://github.com/richardhicks/ndes/blog/main/Install-NdesServer.ps1
 
-.TAGS <comma-separated list of descriptive tags>
+.TAGS NDES, SCEP, Intune, PKI, ADCS, Certificate, Microsoft, Windows
 
 #>
 
@@ -44,7 +44,7 @@
     The configuration of the CA to use for NDES. The syntax is 'CA server FQDN\CA common name'. Use certutil.exe -dump to find the CA configuration.
 
 .PARAMETER Fqdn
-    This paramter is optional. It is the custom fully qualified domain name (FQDN) for the NDES service when configured behind a load balancer.
+    This parameter is optional. It is the custom fully qualified domain name (FQDN) for the NDES service when configured behind a load balancer.
 
 .PARAMETER RemoveLegacyCertificates
     This parameter is optional. If specified, any legacy certificates issued to the NDES server will be removed.
@@ -75,12 +75,15 @@
     In addition, this script performs several post-installation tasks to ensure the NDES service is properly configured, optimized, and secured.
 
 .LINK
+    https://github.com/richardhicks/ndes/blob/main/Install-NdesServer.ps1
+
+.LINK
     https://www.richardhicks.com/
 
 .NOTES
-    Version:        1.3.9
+    Version:        1.3.11
     Creation Date:  November 29, 2023
-    Last Updated:   May 15, 2024
+    Last Updated:   August 20, 2024
     Author:         Richard Hicks
     Organization:   Richard M. Hicks Consulting, Inc.
     Contact:        rich@richardhicks.com
@@ -138,8 +141,13 @@ If ($GroupManagedServiceAccount) {
 
     Else {
 
+        # Display a warning and exit if the gMSA account isn't formatted correctly
         Write-Warning "The gMSA account $ServiceAccount is not formatted correctly. The correct format is <domain>\<user>$."
+
+        # Stop transcript
         Stop-Transcript
+
+        # End script
         Return
 
     }
@@ -159,19 +167,42 @@ $Certificate = Get-ChildItem -Path cert:\localmachine\my\$Thumbprint -ErrorActio
 
 If ($Null -eq $Certificate) {
 
-    # If the certificate isn't found, display a warning and exit
+    # Display a warning and exit if the certificate isn't found
     Write-Warning "Unable to find certificate with thumbprint $Thumbprint."
+
+    # Stop transcript
     Stop-Transcript
+
+    # End script
     Return
 
 }
 
 # Install NDES role
 Write-Verbose 'Installing NDES role...'
-Install-WindowsFeature -Name ADCS-Device-Enrollment -IncludeManagementTools | Out-Null
+[void](Install-WindowsFeature -Name ADCS-Device-Enrollment -IncludeManagementTools)
 
 # Install required IIS and PowerShell features
-Install-WindowsFeature -Name @('Web-Filtering', 'Web-ASP-Net', 'Web-ASP-Net45', 'Web-WMI', 'NET-HTTP-Activation', 'NET-WCF-HTTP-Activation45', 'RSAT-AD-PowerShell') | Out-Null
+Write-Verbose 'Installing supporting features...'
+Try {
+
+    [void](Install-WindowsFeature -Name @('Web-Filtering', 'Web-ASP-Net', 'Web-ASP-Net45', 'Web-WMI', 'NET-HTTP-Activation', 'NET-WCF-HTTP-Activation45', 'RSAT-AD-PowerShell'))
+
+}
+
+Catch {
+
+    # If an error occurs, display a warning, stop the transcript, and exit the script
+    Write-Warning -Message $_.Exception.Message
+    Write-Warning 'An error occurred while installing NDES supporting features. Correct the issue and run the script again.'
+
+    # Stop transcript
+    Stop-Transcript
+
+    # End script
+    Return
+
+}
 
 # Check local IIS_IUSRS group for NDES service account
 $IISUsers = Get-LocalGroupMember -Group IIS_IUSRS -Member $ServiceAccount -ErrorAction SilentlyContinue
@@ -240,14 +271,14 @@ Try {
 
 Catch {
 
-    # If an error occurs, display a warning and stop the transcript
+    # If an error occurs, display a warning, stop the transcript, and exit the script
     Write-Warning -Message $_.Exception.Message
+    Write-Warning 'An error occurred while installing the NDES role. Remove the configuration using the following PowerShell command and run the script again: Uninstall-AdcsNetworkDeviceEnrollmentService -Force'
 
     # Stop transcript
     Stop-Transcript
 
     # End script
-    Write-Warning "An error occurred while installing the NDES role. Remove the configuration using `'Uninstall-AdcsNetworkDeviceEnrollmentService -Force`' and run the script again."
     Return
 
 }
@@ -261,68 +292,66 @@ If ($Fqdn) {
 
 }
 
-# Disble IE enhanced security. This is required to install the Intune Certificate Connector
+# Disable IE enhanced security. This is required to install the Intune Certificate Connector
 Write-Verbose 'Disabling IE enhanced security...'
 Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Type DWORD -Value '0'
 Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Type DWORD -Value '0'
 
-# Define NDES certificate enrollment template
+# Define certificate template used for NDES encryption
 Write-Verbose 'Defining NDES certificate template...'
 Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\ -Name  EncryptionTemplate -Value $Template -Force
-Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\ -Name  GeneralPurposeTemplate -Value $Template -Force
-Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\ -Name  SignatureTemplate -Value $Template -Force
 
 # Enable NDES long URL support
 Write-Verbose 'Enabling IIS long URL support...'
-New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\HTTP\Parameters\' -Name MaxFieldLength -Type DWORD -Value 65534 -Force | Out-Null
-New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\HTTP\Parameters\' -Name MaxRequestBytes -Type DWORD -Value 65534 -Force | Out-Null
+[void](New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\HTTP\Parameters\' -Name MaxFieldLength -Type DWORD -Value 65534 -Force)
+[void](New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\HTTP\Parameters\' -Name MaxRequestBytes -Type DWORD -Value 65534 -Force)
 
 # Update NDES max URL length and max query string values in IIS request filtering
 Write-Verbose 'Setting URL length and max query string values...'
-Invoke-Command -ScriptBlock { "$env:WinDir\system32\inetsrv\appcmd.exe set config /section:requestfiltering /requestlimits.maxurl:65534" } | Out-Null
-Invoke-Command -ScriptBLock { "$env:WinDir\system32\inetsrv\appcmd.exe set config /section:requestfiltering /requestlimits.maxquerystring:65534" } | Out-Null
+[void](Invoke-Command -ScriptBlock { "$env:WinDir\system32\inetsrv\appcmd.exe set config /section:requestfiltering /requestlimits.maxurl:65534" })
+[void](Invoke-Command -ScriptBLock { "$env:WinDir\system32\inetsrv\appcmd.exe set config /section:requestfiltering /requestlimits.maxquerystring:65534" })
 
 # Remove http site binding
 Write-Verbose 'Removing HTTP site binding in IIS...'
-Remove-IISSiteBinding -Name 'Default Web Site' -BindingInformation '*:80:' -Confirm:$False | Out-Null
+[void](Remove-IISSiteBinding -Name 'Default Web Site' -BindingInformation '*:80:' -Confirm:$false)
 
 # Disable default document
 Write-Verbose 'Disabling IIS default document...'
-Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/defaultDocument' -Name 'Enabled' -Value 'False' | Out-Null
+[void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/defaultDocument' -Name 'Enabled' -Value 'False')
 
 # Remove default IIS files
 Write-Verbose 'Removing default IIS files...'
-Remove-Item -Path C:\Inetpub\wwwroot\iisstart.* | Out-Null
+[void](Remove-Item -Path C:\Inetpub\wwwroot\iisstart.*)
 
 # Check for existing certificate binding in IIS
 If ((Get-WebBinding -Name 'Default Web Site' -Port 443 -Protocol 'HTTPS').Count -gt 0) {
 
     # Remove existing web binding
     Write-Verbose 'Removing existing HTTPS binding...'
-    Remove-WebBinding -Name 'Default Web Site' -Port 443 -Protocol 'HTTPS' -Confirm:$False | Out-Null
+    [void](Remove-WebBinding -Name 'Default Web Site' -Port 443 -Protocol 'HTTPS' -Confirm:$false)
 
 }
 
 # Configure TLS certificate binding in IIS
-New-WebBinding -Name 'Default Web Site' -Ipaddress '*' -Port 443 -Protocol 'HTTPS' -SslFlags 0 | Out-Null
+[void](New-WebBinding -Name 'Default Web Site' -Ipaddress '*' -Port 443 -Protocol 'HTTPS' -SslFlags 0)
 (Get-WebBinding -Name 'Default Web Site').AddSslCertificate($Thumbprint, 'My')
 
 # Restart IIS
 Write-Verbose 'Restarting IIS...'
-Restart-Service -Name W3SVC -Force | Out-Null
+[void](Restart-Service -Name W3SVC -Force)
 
 # Configure IIS SCEP application pool to use a Group Managed Service Account (gMSA)
 If ($GroupManagedServiceAccount) {
 
     Write-Verbose 'Configuring IIS SCEP application pool to use a Group Managed Service Account (gMSA)...'
-    Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.applicationHost/applicationPools/add[@name="SCEP"]/processModel' -Name 'identityType' -Value 'SpecificUser' | Out-Null
-    Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.applicationHost/applicationPools/add[@name="SCEP"]/processModel' -Name 'userName' -Value $ServiceAccount | Out-Null
+    [void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.applicationHost/applicationPools/add[@name="SCEP"]/processModel' -Name 'identityType' -Value 'SpecificUser')
+    [void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.applicationHost/applicationPools/add[@name="SCEP"]/processModel' -Name 'userName' -Value $ServiceAccount)
 
 }
 
 # Enable verbose logging for certificate enrollment events
 Write-Verbose 'Enabling verbose logging for certificate enrollment events...'
-Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\AutoEnrollment\ -Name AEEventLogLevel -Value 0 | Out-Null
+[void](Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\AutoEnrollment\ -Name AEEventLogLevel -Value 0)
 
 # Create scheduled task to restart the SCEP IIS application pool on certificate renewal events
 Write-Verbose 'Creating scheduled task to restart SCEP IIS application pool on certificate renewal events...'
@@ -358,8 +387,6 @@ If ($RemoveLegacyCertificates) {
 
 # Display post-installation instructions
 Write-Warning 'A restart is required to complete the installation and configuration of the NDES role.'
-Write-Warning 'Remove legacy certificates from issuing CA server.'
-Write-Warning 'If running the Intune Connector under a service account, ensure the account has been added to the local administrators group.'
 
 # Stop transcript
 Write-Verbose 'Stopping transcript...'
@@ -368,8 +395,8 @@ Stop-Transcript
 # SIG # Begin signature block
 # MIInGwYJKoZIhvcNAQcCoIInDDCCJwgCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUFKmXa2nzWzZeAkGPJPMJ0/Yn
-# xjKggiDDMIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUBCN3Tg6dAjH7hoECet+KKynA
+# i9OggiDDMIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -549,30 +576,30 @@ Stop-Transcript
 # NiBTSEEzODQgMjAyMSBDQTECEAFmchIElUK4sup54tMHrEQwCQYFKw4DAhoFAKB4
 # MBgGCisGAQQBgjcCAQwxCjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQB
 # gjcCAQQwHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkE
-# MRYEFF/Vt4zb8qbkRNxoznCejzqBDSO8MA0GCSqGSIb3DQEBAQUABIIBgJPR5/HR
-# fRFyJJ48An2tmX1Rz9XpDnrm8mrNio9tueIrOFdXtP5HotRNRKFK0fQVNQlBySvp
-# 80i3/ajzXosHHuCEKbcQubq3zuru8uX4jv5NfcYT5YRVsfk0K4jUpz9nbYVHfdlR
-# 3cM4QBe3NH6aeIkzbLwWfP5Os+juREKDdnzLLuDXfDEdv1Mz9xRUhuRyGDMwlmOR
-# wd7lUiFWTSYCWxdhJAspqTMdiMEZ8eBQk1/W9i0Gckca7qPl1RT7NMscCD9TBqng
-# gaMUbKGKSYGGKGLeTFW+83FdjiLyUR6JTBFQGAJPLiLuZn76V1OLmuypVwSoVudR
-# tAY1Q+VpONkleTWUXnqD/r+IrPOPRrttBpTxIgcXbOk0K7X1dgYHEZv2Jd4rsCwK
-# 7l2VDv0Zrxlqn0BAJHgBI8ylG2tcmETyn71Bf5K3sz8fLknpm3X6xsovaiF7dhFt
-# AFY4N7m1YQtxZQEP5fbCwBDwB/Q07tTKVHkHt0byzP08DtKcn1J8zDysJaGCAyAw
+# MRYEFE0dpyrySXLiXzPD/G25XpQmZtMNMA0GCSqGSIb3DQEBAQUABIIBgBzJ+OuM
+# tbLyb1udfcCItTIe9YcTDVutbSOPsnsAhDta8K46Q72fL1cOtP+hnknbAWw+UVFv
+# einsiNJsBt8MW1ggL7NBK6/LBieD9UjVpxRFh41+48H2u9gvBxT/jLx3OfnuncJa
+# LZCSYFD5E18V9VtETcp/I5DRQ8XX9QsEksl9uu37U9k+0z2Fe7wMw4XC5i4VMkkm
+# PCW+r/A6klpzasSUN0PaWZ9EeN2roTkBEL5sd7VAUVZ6kqp+V+dVI6xKlMVNQHM+
+# /2aKmIrDjzXgoW9ZihkC5chb7MtpTsv2K74NU7DFTmJjhZWylAhxpmksMR/5pA/A
+# vaFSDu9qZXU4a4FJUedN15+W1EMib+Qnz8YI4xi9DRnmoxkyUPpxH1HC/HzIxVWh
+# KIYwgQAvpSVvtr4NU0ihIEE0K1snCYnp0zpYd/S5pwRWUm+4mxHT5tyMMZBUtjEP
+# CPioRtL234EMyygOf4gS90giDs9Yfc2JGkF155cld3F25TrG+nwLE+LrBKGCAyAw
 # ggMcBgkqhkiG9w0BCQYxggMNMIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYD
 # VQQKEw5EaWdpQ2VydCwgSW5jLjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBH
 # NCBSU0E0MDk2IFNIQTI1NiBUaW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/l
 # YRYwDQYJYIZIAWUDBAIBBQCgaTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwG
-# CSqGSIb3DQEJBTEPFw0yNDA1MTYyMzIwNDJaMC8GCSqGSIb3DQEJBDEiBCDSXfUe
-# c9nhPN4+c00p6mdZBhSWdc/l/ozEPCzL0zBG8jANBgkqhkiG9w0BAQEFAASCAgBg
-# +8hET2hED8fU2fq3JVaBzF+tAyGU/r2Au1l7gTXc4NdKyToJn9/1AmF2L0h2dLjT
-# 2BmXz5CYAUtbsi6PtK27XuAGOZE0qcTSN0b1OJoZzhm55WA1DpPqvAo5unY/0EIX
-# OSmPtZOP5KpwIWcPdSiQOoAfQu6KWT/Sl5V/FYOBcf8LQkNmpqatn85R4wCH+wp3
-# kP7Fv4SMX6qZxa4KQS5IWFLqIofU37RCjByCMtRNjhxv6wbGF8gff2R5qtrbnxpt
-# 2VVOrO83RXraykdSTlFx6BPBmBvcPdmlmLSTlHxyoTvbT+By0FCefrrIYFSQlJql
-# HgD9BeQayHy4GvoU+FouGDqfhgnrf7jECojLl3r61v5TO0Hiz08DE7j1ZNo1MpOc
-# DMo/BrT6gCUWNoCyFYiOoByKxp730KmCXVH1t7OL6HfBh915tt1OJ20sRgEn0ES1
-# 7YeE43AcJ1m5bEoxngDy3okNdRDYlB1EBZor/aUUbRXPswmfjUmeuh+hJ8RAJvP7
-# RWTW6vK/nOwVmXMIQSMwDAAOppaoNyy46RkvP+Zir/+v+c9Zq97ZeEfpje81HJNp
-# KROYLPeanc5lZbWSsRY3Jzio7jnB05E5Ny5rGH1fLN4MTXMEQwpS5KdGqZGWmlIK
-# /8c0U68/9bKD4g5drVaMpudp+He3dWM/fklRKpMckQ==
+# CSqGSIb3DQEJBTEPFw0yNDA4MjEwMTUwMzFaMC8GCSqGSIb3DQEJBDEiBCByexEX
+# JQnEKnb9PQAnSyaoy/MX7TwAKwo42gSYFuPT/DANBgkqhkiG9w0BAQEFAASCAgAZ
+# EDxBtunnMTAIzCagRSWoKpoHidcwhLXzkrWc/8vJEzIHTuQVckC90sOUSbjBBLT/
+# BPNj646wdPugGYW7psBSg8jr9vaiaXwvrsubv/BBO9sJ6LBqj2dU6Clbz7LbNi0a
+# mO1xKGthoYoF3Ijg7F/9rICmY/XG7GlFY1KC2ZvO+ctuIm3NwOOL4bhErmOaJzAN
+# hGOkS5h5OO2t/3yQJD0XOiTScut0an6Ast80NlvzxqeVa+BQAjqX9L2UJVqCLL16
+# EKh7dcNLFgIPivOo6uNwo0teF0ykBZo8qgvv6Tqz30X9/7TtHu1yM3GUWYemEuxS
+# 9ZAGceP5iKfX2lupBdCiQp0Z6MiCkJ6R3WKrY16u7lxwzW41MlAjW4ROWS8P+r9L
+# YusuwZLaL7swntqjzF8Y4Nm6dZNWtZg6/bWXb5HZoA9AkkuOxdODB5Gxbl8z/SJO
+# 9jfwf79aploAAK8Lm6l617wtwJbIYNaBQ0bhoxaBpLyIUfTCFZUGmmBwv9qtK9gi
+# 0WXAL3cS5/dZUtH6XICxPtDZTpRSKQBj7UvrnHy9oCX//4IZCcCJeKfVO+va7qGg
+# FPc9I6A5Gz9+NangbTbZFw28SsfWT7no7VSulbQ9kitVSxTKtyIa9TgElEEyE24+
+# 4bCzhA8gzTD+8oGe+0zfy0PVPRSODv/b3G0IM+Ss8A==
 # SIG # End signature block
