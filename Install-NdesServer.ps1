@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 1.3.11
+.VERSION 1.3.13
 
 .GUID a52391cf-9c38-4304-8c9b-89f151461f3c
 
@@ -14,7 +14,7 @@
 
 .LICENSEURI https://github.com/richardhicks/ndes/blob/main/LICENSE
 
-.PROJECTURI https://github.com/richardhicks/ndes/blog/main/Install-NdesServer.ps1
+.PROJECTURI https://github.com/richardhicks/ndes/blob/main/Install-NdesServer.ps1
 
 .TAGS NDES, SCEP, Intune, PKI, ADCS, Certificate, Microsoft, Windows
 
@@ -81,9 +81,9 @@
     https://www.richardhicks.com/
 
 .NOTES
-    Version:        1.3.11
+    Version:        1.3.13
     Creation Date:  November 29, 2023
-    Last Updated:   August 20, 2024
+    Last Updated:   August 23, 2024
     Author:         Richard Hicks
     Organization:   Richard M. Hicks Consulting, Inc.
     Contact:        rich@richardhicks.com
@@ -297,9 +297,11 @@ Write-Verbose 'Disabling IE enhanced security...'
 Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Type DWORD -Value '0'
 Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Type DWORD -Value '0'
 
-# Define certificate template used for NDES encryption
+# Define NDES certificate templates
 Write-Verbose 'Defining NDES certificate template...'
 Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\ -Name  EncryptionTemplate -Value $Template -Force
+Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\ -Name  GeneralPurposeTemplate -Value $Template -Force
+Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\ -Name  SignatureTemplate -Value $Template -Force
 
 # Enable NDES long URL support
 Write-Verbose 'Enabling IIS long URL support...'
@@ -315,7 +317,7 @@ Write-Verbose 'Setting URL length and max query string values...'
 Write-Verbose 'Removing HTTP site binding in IIS...'
 [void](Remove-IISSiteBinding -Name 'Default Web Site' -BindingInformation '*:80:' -Confirm:$false)
 
-# Disable default document
+# Disable IIS default document
 Write-Verbose 'Disabling IIS default document...'
 [void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/defaultDocument' -Name 'Enabled' -Value 'False')
 
@@ -395,8 +397,8 @@ Stop-Transcript
 # SIG # Begin signature block
 # MIInGwYJKoZIhvcNAQcCoIInDDCCJwgCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUBCN3Tg6dAjH7hoECet+KKynA
-# i9OggiDDMIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUzQfsWt873HpJyp/QS29XGsHV
+# 8f2ggiDDMIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -576,30 +578,30 @@ Stop-Transcript
 # NiBTSEEzODQgMjAyMSBDQTECEAFmchIElUK4sup54tMHrEQwCQYFKw4DAhoFAKB4
 # MBgGCisGAQQBgjcCAQwxCjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQB
 # gjcCAQQwHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkE
-# MRYEFE0dpyrySXLiXzPD/G25XpQmZtMNMA0GCSqGSIb3DQEBAQUABIIBgBzJ+OuM
-# tbLyb1udfcCItTIe9YcTDVutbSOPsnsAhDta8K46Q72fL1cOtP+hnknbAWw+UVFv
-# einsiNJsBt8MW1ggL7NBK6/LBieD9UjVpxRFh41+48H2u9gvBxT/jLx3OfnuncJa
-# LZCSYFD5E18V9VtETcp/I5DRQ8XX9QsEksl9uu37U9k+0z2Fe7wMw4XC5i4VMkkm
-# PCW+r/A6klpzasSUN0PaWZ9EeN2roTkBEL5sd7VAUVZ6kqp+V+dVI6xKlMVNQHM+
-# /2aKmIrDjzXgoW9ZihkC5chb7MtpTsv2K74NU7DFTmJjhZWylAhxpmksMR/5pA/A
-# vaFSDu9qZXU4a4FJUedN15+W1EMib+Qnz8YI4xi9DRnmoxkyUPpxH1HC/HzIxVWh
-# KIYwgQAvpSVvtr4NU0ihIEE0K1snCYnp0zpYd/S5pwRWUm+4mxHT5tyMMZBUtjEP
-# CPioRtL234EMyygOf4gS90giDs9Yfc2JGkF155cld3F25TrG+nwLE+LrBKGCAyAw
+# MRYEFAPn8Ay+oPplhKLOXEflpB/zlmbgMA0GCSqGSIb3DQEBAQUABIIBgI8sP3qp
+# 6OGJiP9ixZQHf2FGrw+obC1bscVwzhbk7cXrfhF5o1dSq2E301r32wMQo5wr3k7A
+# k10UBypRj9x+CGANTAJE+2AlK9+uM6t2z5awS1KCmkEtXxC1CSTxXZAd+OVm6lFS
+# roD4xGXNeygJtW0H0JcpuIkIv247LvWJCGGKcZoYDkSvCNXX7EN+KzvhIO3+/4Q5
+# lGVu8iJmjkqm66RRS31ElMMaz7uJT80h0Z3XWUwNZuYdsP3tigRcHQyOX0k5Wtq1
+# L2Gob+MOrgs6Ev3AMvRA1Q+Rz32sR7jYapkQhMvxuq04InNJw1jpzqZ+lquAw3AF
+# sG1Fckpil5tpHogie2Ksmtm8AYvgmLte9mbINnmYROPyws5rx7CgTJ/aupldGk61
+# XzXeVYxrxj0gEPQ374zMgJ1ggWF+9NfikxyCVCh4kiLkby2717IM0yVoJRLNt9SC
+# b4QIF0MCArBj1+bdawYf9beKuMbeeRChg48vN2s2JiMXl9Bq64mbb0rpyqGCAyAw
 # ggMcBgkqhkiG9w0BCQYxggMNMIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYD
 # VQQKEw5EaWdpQ2VydCwgSW5jLjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBH
 # NCBSU0E0MDk2IFNIQTI1NiBUaW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/l
 # YRYwDQYJYIZIAWUDBAIBBQCgaTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwG
-# CSqGSIb3DQEJBTEPFw0yNDA4MjEwMTUwMzFaMC8GCSqGSIb3DQEJBDEiBCByexEX
-# JQnEKnb9PQAnSyaoy/MX7TwAKwo42gSYFuPT/DANBgkqhkiG9w0BAQEFAASCAgAZ
-# EDxBtunnMTAIzCagRSWoKpoHidcwhLXzkrWc/8vJEzIHTuQVckC90sOUSbjBBLT/
-# BPNj646wdPugGYW7psBSg8jr9vaiaXwvrsubv/BBO9sJ6LBqj2dU6Clbz7LbNi0a
-# mO1xKGthoYoF3Ijg7F/9rICmY/XG7GlFY1KC2ZvO+ctuIm3NwOOL4bhErmOaJzAN
-# hGOkS5h5OO2t/3yQJD0XOiTScut0an6Ast80NlvzxqeVa+BQAjqX9L2UJVqCLL16
-# EKh7dcNLFgIPivOo6uNwo0teF0ykBZo8qgvv6Tqz30X9/7TtHu1yM3GUWYemEuxS
-# 9ZAGceP5iKfX2lupBdCiQp0Z6MiCkJ6R3WKrY16u7lxwzW41MlAjW4ROWS8P+r9L
-# YusuwZLaL7swntqjzF8Y4Nm6dZNWtZg6/bWXb5HZoA9AkkuOxdODB5Gxbl8z/SJO
-# 9jfwf79aploAAK8Lm6l617wtwJbIYNaBQ0bhoxaBpLyIUfTCFZUGmmBwv9qtK9gi
-# 0WXAL3cS5/dZUtH6XICxPtDZTpRSKQBj7UvrnHy9oCX//4IZCcCJeKfVO+va7qGg
-# FPc9I6A5Gz9+NangbTbZFw28SsfWT7no7VSulbQ9kitVSxTKtyIa9TgElEEyE24+
-# 4bCzhA8gzTD+8oGe+0zfy0PVPRSODv/b3G0IM+Ss8A==
+# CSqGSIb3DQEJBTEPFw0yNDA4MjQwMTI0NDVaMC8GCSqGSIb3DQEJBDEiBCDNzKiT
+# oBnGj7atJ/K0jTxAi6PCeJRdjx737ndbSe1zVjANBgkqhkiG9w0BAQEFAASCAgBg
+# LzdIU5D1f1S3ZS/LACA5hCpvIJlyOyMjvAorFHP5bGkbBXENxJEJalQR/q+f4yYi
+# xOI4zPtUNDDHoY8nVtvM8NmvG9IbAoFPnIP3mcHw/7EGuoi/8Y617DcDin+v8t7f
+# yK9tSFcfGrbkiKz0n+4CCoptkSwQFznxzXhmSxutF4sdPXmCyKQa2MFP38XPEz3T
+# l/QkUTrDv84BMr9/hzzh8+6sxVARgML5Nq3fTV91ejhn7yBQGHbtbAOohaNiYuPk
+# r0Qy8pL5an8K0IsJMDkCt3TjCRx9eG5ybpncBKqpZ2ZzlTgW+Vxf6FmaDJK8szYr
+# eSc6YLb/hCh7ucBz1vYu3LEY1rGUlDbS2DGoWlghHKMBkFkp05S6mAUBAhNUej6T
+# 6jm7lxZrnQkQv8NqphatimhiaHGXqtygPXr8eSxKdX/t3pl1JiiJIMFaaXuHXKyC
+# fRduiFYeEw8R5AN6pxq12xYNuyRx7w5FoeetrYZZnAhuKO4r/es7k9QrdgEO09rt
+# vALb5jUknZbJTHPC3d18W82Li6RtN36nbu1s5H5Ra3TkLpLLk3MQiJ2yZpCtxcjK
+# xz3fYBoNgFgFhCw7VE0mgL7vS/ZZX2BBiOoDH6n13pn6ULjN4ChZTttwTJka9K6j
+# bTQx6XcsSDVFN/UoOJov8W4uLep36yd2DMPEjAnbDQ==
 # SIG # End signature block
