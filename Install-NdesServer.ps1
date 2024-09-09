@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 1.3.13
+.VERSION 1.4
 
 .GUID a52391cf-9c38-4304-8c9b-89f151461f3c
 
@@ -81,9 +81,9 @@
     https://www.richardhicks.com/
 
 .NOTES
-    Version:        1.3.13
+    Version:        1.4
     Creation Date:  November 29, 2023
-    Last Updated:   August 23, 2024
+    Last Updated:   September 9, 2024
     Author:         Richard Hicks
     Organization:   Richard M. Hicks Consulting, Inc.
     Contact:        rich@richardhicks.com
@@ -351,6 +351,10 @@ If ($GroupManagedServiceAccount) {
 
 }
 
+# Configure the SHA256 hash algorithm for certificate requests
+[void](New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\HashAlgorithm\' -Force)
+[void](New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\HashAlgorithm\' -PropertyType String -Name HashAlgorithm -Value SHA256 -Force)
+
 # Enable verbose logging for certificate enrollment events
 Write-Verbose 'Enabling verbose logging for certificate enrollment events...'
 [void](Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\AutoEnrollment\ -Name AEEventLogLevel -Value 0)
@@ -397,8 +401,8 @@ Stop-Transcript
 # SIG # Begin signature block
 # MIInGwYJKoZIhvcNAQcCoIInDDCCJwgCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUzQfsWt873HpJyp/QS29XGsHV
-# 8f2ggiDDMIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUr6z06U6XVlMJrWHK+K1d0Ere
+# cVWggiDDMIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -578,30 +582,30 @@ Stop-Transcript
 # NiBTSEEzODQgMjAyMSBDQTECEAFmchIElUK4sup54tMHrEQwCQYFKw4DAhoFAKB4
 # MBgGCisGAQQBgjcCAQwxCjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQB
 # gjcCAQQwHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkE
-# MRYEFAPn8Ay+oPplhKLOXEflpB/zlmbgMA0GCSqGSIb3DQEBAQUABIIBgI8sP3qp
-# 6OGJiP9ixZQHf2FGrw+obC1bscVwzhbk7cXrfhF5o1dSq2E301r32wMQo5wr3k7A
-# k10UBypRj9x+CGANTAJE+2AlK9+uM6t2z5awS1KCmkEtXxC1CSTxXZAd+OVm6lFS
-# roD4xGXNeygJtW0H0JcpuIkIv247LvWJCGGKcZoYDkSvCNXX7EN+KzvhIO3+/4Q5
-# lGVu8iJmjkqm66RRS31ElMMaz7uJT80h0Z3XWUwNZuYdsP3tigRcHQyOX0k5Wtq1
-# L2Gob+MOrgs6Ev3AMvRA1Q+Rz32sR7jYapkQhMvxuq04InNJw1jpzqZ+lquAw3AF
-# sG1Fckpil5tpHogie2Ksmtm8AYvgmLte9mbINnmYROPyws5rx7CgTJ/aupldGk61
-# XzXeVYxrxj0gEPQ374zMgJ1ggWF+9NfikxyCVCh4kiLkby2717IM0yVoJRLNt9SC
-# b4QIF0MCArBj1+bdawYf9beKuMbeeRChg48vN2s2JiMXl9Bq64mbb0rpyqGCAyAw
+# MRYEFH7tc0s0y2/cnn5uv0km+habBeU0MA0GCSqGSIb3DQEBAQUABIIBgL1V4E/1
+# cwqiUH+nDvjVY7wz+0C3g8wIZEfsFJ8wAm5fE5xo82jJJXQ7tZRHS5qapKfElUBt
+# klpjsJW8V7Q+Wk0NLMkWK1+0/GjLJKZbzVJc5qQGSLEWvhF4RAzaLTZrByPSorvM
+# nhMtsO3yjl02TkcHJbCdX/yZS6X2lFZYj1M3Tkh3UR+zCt9TbLxzepHhUhsueCeT
+# 5jRW+bZZ15polj617aYT/Zjze67WwhMiOVDnzlRl9I/kh/ZFRk+Wi9LjykRkUdak
+# rmADLTUvzwWnsljTRGKcit6y7yOfry07+2dMQbcvso2ffy4QgORvoShCdkEFGIku
+# gJ+g1FoJLgKGbIj9VNkP/bZ8Ttc3QHNms9Gfbwh5s1DuKavhC1y0dArBnMhQ+xTJ
+# pwxxZkL7jkneOqywYx7CJMsY1tdJu39QZ4PgD1JdOwY8cP/Lem2luRJFcxmEkw8I
+# TtYddr3kC/Jmw/YFY8SDkMeTnGdyNRs9anB+RPi659t7cWM/u2RBGpwZkaGCAyAw
 # ggMcBgkqhkiG9w0BCQYxggMNMIIDCQIBATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYD
 # VQQKEw5EaWdpQ2VydCwgSW5jLjE7MDkGA1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBH
 # NCBSU0E0MDk2IFNIQTI1NiBUaW1lU3RhbXBpbmcgQ0ECEAVEr/OUnQg5pr/bP1/l
 # YRYwDQYJYIZIAWUDBAIBBQCgaTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwG
-# CSqGSIb3DQEJBTEPFw0yNDA4MjQwMTI0NDVaMC8GCSqGSIb3DQEJBDEiBCDNzKiT
-# oBnGj7atJ/K0jTxAi6PCeJRdjx737ndbSe1zVjANBgkqhkiG9w0BAQEFAASCAgBg
-# LzdIU5D1f1S3ZS/LACA5hCpvIJlyOyMjvAorFHP5bGkbBXENxJEJalQR/q+f4yYi
-# xOI4zPtUNDDHoY8nVtvM8NmvG9IbAoFPnIP3mcHw/7EGuoi/8Y617DcDin+v8t7f
-# yK9tSFcfGrbkiKz0n+4CCoptkSwQFznxzXhmSxutF4sdPXmCyKQa2MFP38XPEz3T
-# l/QkUTrDv84BMr9/hzzh8+6sxVARgML5Nq3fTV91ejhn7yBQGHbtbAOohaNiYuPk
-# r0Qy8pL5an8K0IsJMDkCt3TjCRx9eG5ybpncBKqpZ2ZzlTgW+Vxf6FmaDJK8szYr
-# eSc6YLb/hCh7ucBz1vYu3LEY1rGUlDbS2DGoWlghHKMBkFkp05S6mAUBAhNUej6T
-# 6jm7lxZrnQkQv8NqphatimhiaHGXqtygPXr8eSxKdX/t3pl1JiiJIMFaaXuHXKyC
-# fRduiFYeEw8R5AN6pxq12xYNuyRx7w5FoeetrYZZnAhuKO4r/es7k9QrdgEO09rt
-# vALb5jUknZbJTHPC3d18W82Li6RtN36nbu1s5H5Ra3TkLpLLk3MQiJ2yZpCtxcjK
-# xz3fYBoNgFgFhCw7VE0mgL7vS/ZZX2BBiOoDH6n13pn6ULjN4ChZTttwTJka9K6j
-# bTQx6XcsSDVFN/UoOJov8W4uLep36yd2DMPEjAnbDQ==
+# CSqGSIb3DQEJBTEPFw0yNDA5MDkxODU5MTlaMC8GCSqGSIb3DQEJBDEiBCDfbVe3
+# E+CBZMgNtVHltQwPP4JZ1KbOMc2S+e7UQKM2STANBgkqhkiG9w0BAQEFAASCAgAy
+# Db1x5k06dqPT0lgOPeQicjWf2/N2T2smOjhi0xPITRKqOArmOJZ8HeCGw/J5WBNV
+# 6mUJv/w7ej7WRigIXFgOnkZcFgc3mBkdehCsnd0BKW3mhkt/r+w3UnXOmAjYXQXV
+# oGyfrJtYFk95UXd9XxO7vCyP8En15Kg0ckHPXi8ZIJPbyEE6iJwY2LjnY23eYC82
+# sakyv9SRonpVz1FZ5DWiYQKd5k4tE04N77uYqPpe/gJ91kJdVjFF0SZ/C9lMaHbP
+# R2Ab9t3U3NcOUvTG8WGYKvPPwLlf+4cmPM7XTYdxDj4/YODFHVmIzOzCAWi8sj7R
+# lWCTXeQWsqaVH1NEI5jKyPsfOTH269Mh+BNYBP5O74IF/wv5XT7VzLq7xj0VGm8Z
+# J3ZTN6hS37xY9sUaVdkpoBzvvYoAlYzM1zJiZEDLMYqzPnELN1ofXTjtTojJTidO
+# facwxbfpdT/3gtV5ZSC5EX3/yGc0d6mi/Pgpdm180MYXoRdGZGo/LwYeMJ5SwOCz
+# DI5ZhRMyAgcZAuSw8BVJ7u4bfaFm0+AamDfRN/g8d+uLV/NaWO4n8ruyJOXSKXEC
+# /FAU+d+SQzIQoDaFHnUkQ9KF0A/ib3mXogFK86Dy6sqxnmEZBvVzdrCZQur3Ap+H
+# S4P6GlDESP4n7Cifp7/YdOyLhnsN/W7bq3U55IjEeA==
 # SIG # End signature block
