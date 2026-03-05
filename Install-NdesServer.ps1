@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 1.6.3
+.VERSION 1.6.5
 
 .GUID a52391cf-9c38-4304-8c9b-89f151461f3c
 
@@ -8,13 +8,13 @@
 
 .COMPANYNAME Richard M. Hicks Consulting, Inc.
 
-.COPYRIGHT Copyright (C) 2025 Richard M. Hicks Consulting, Inc. All Rights Reserved.
+.COPYRIGHT Copyright (C) 2025-2026 Richard M. Hicks Consulting, Inc. All Rights Reserved.
 
 .LICENSE Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 .LICENSEURI https://github.com/richardhicks/ndes/blob/main/LICENSE
 
-.PROJECTURI https://github.com/richardhicks/ndes/blob/main/Install-NdesServer.ps1
+.PROJECTURI https://github.com/richardhicks/ndes/
 
 .TAGS NDES, SCEP, Intune, PKI, ADCS, Certificate, Microsoft, Windows
 
@@ -92,9 +92,9 @@
     https://www.richardhicks.com/
 
 .NOTES
-    Version:        1.6.3
+    Version:        1.6.5
     Creation Date:  November 29, 2023
-    Last Updated:   August 22, 2025
+    Last Updated:   March 4, 2026
     Author:         Richard Hicks
     Organization:   Richard M. Hicks Consulting, Inc.
     Contact:        rich@richardhicks.com
@@ -218,8 +218,26 @@ Else {
 }
 
 # Install NDES role
-Write-Verbose 'Installing NDES role...'
-[void](Install-WindowsFeature -Name ADCS-Device-Enrollment -IncludeManagementTools)
+Try {
+
+    Write-Verbose 'Installing NDES role...'
+    [void](Install-WindowsFeature -Name ADCS-Device-Enrollment -IncludeManagementTools -ErrorAction Stop)
+
+}
+
+Catch {
+
+    # If an error occurs, display a warning, stop the transcript, and exit the script
+    Write-Warning $_.Exception.Message
+    Write-Warning 'An error occurred while installing the NDES role. Correct the issue and run the script again.'
+
+    # Stop transcript
+    Stop-Transcript
+
+    # End script
+    Return
+
+}
 
 # Install required IIS and PowerShell features
 Write-Verbose 'Installing supporting features...'
@@ -362,7 +380,7 @@ Write-Verbose 'Disabling IIS default document...'
 
 # Remove default IIS files
 Write-Verbose 'Removing default IIS files...'
-[void](Remove-Item -Path C:\Inetpub\wwwroot\iisstart.*)
+[void](Remove-Item -Path $env:systemdrive\Inetpub\wwwroot\iisstart.*)
 
 # Check for existing certificate binding in IIS
 If ((Get-WebBinding -Name 'Default Web Site' -Port 443 -Protocol 'HTTPS').Count -gt 0) {
@@ -458,8 +476,8 @@ Else {
 # SIG # Begin signature block
 # MIIf2gYJKoZIhvcNAQcCoIIfyzCCH8cCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCArY75vz4fEUG4y
-# QU5hcHRixjQ5SZbsUkYptdHU30vyiqCCGpkwggNZMIIC36ADAgECAhAPuKdAuRWN
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAvSziO+8HGn0YO
+# HUKhE1DzuICxIS+9K8B1j8JrzaKQ66CCGpkwggNZMIIC36ADAgECAhAPuKdAuRWN
 # A1FDvFnZ8EApMAoGCCqGSM49BAMDMGExCzAJBgNVBAYTAlVTMRUwEwYDVQQKEwxE
 # aWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xIDAeBgNVBAMT
 # F0RpZ2lDZXJ0IEdsb2JhbCBSb290IEczMB4XDTIxMDQyOTAwMDAwMFoXDTM2MDQy
@@ -606,24 +624,24 @@ Else {
 # YWwgRzMgQ29kZSBTaWduaW5nIEVDQyBTSEEzODQgMjAyMSBDQTECEA1KNNqGkI/A
 # Eyy8gTeTryQwDQYJYIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAA
 # oQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4w
-# DAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgxZHVg+muLWJ1eoSTUZ44MVoU
-# aWcSlNH2zgxfxhHoe98wCwYHKoZIzj0CAQUABEcwRQIhAJVRcT7pKz+W7Nfp54Ir
-# B5qpWLQ2G5mRMEDzJtsLRgh0AiAYEQzf74NIFJWZyVecg/5ftuUGtLu0GKeYKUMm
-# MkIgPKGCAyYwggMiBgkqhkiG9w0BCQYxggMTMIIDDwIBATB9MGkxCzAJBgNVBAYT
+# DAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgdtpRyYp658AtoMaPwYCCaHDJ
+# ymF8ksnlGsOKult9JbIwCwYHKoZIzj0CAQUABEcwRQIgYy+ARfbypEIOGcWzCiBj
+# jbtlWGKxkc7kfzHUgBBr5BMCIQCijTFhw9NAXaNi3UUREuIKa1TakuL9pkASfuz4
+# Rm7BrKGCAyYwggMiBgkqhkiG9w0BCQYxggMTMIIDDwIBATB9MGkxCzAJBgNVBAYT
 # AlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5jLjFBMD8GA1UEAxM4RGlnaUNlcnQg
 # VHJ1c3RlZCBHNCBUaW1lU3RhbXBpbmcgUlNBNDA5NiBTSEEyNTYgMjAyNSBDQTEC
 # EAqA7xhLjfEFgtHEdqeVdGgwDQYJYIZIAWUDBAIBBQCgaTAYBgkqhkiG9w0BCQMx
-# CwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNTA4MjIyMjI2MzdaMC8GCSqG
-# SIb3DQEJBDEiBCDjCHc/bC7sbBxOwfM/NgJ8TUiuGg/lKlCRBKoXh8U4ZTANBgkq
-# hkiG9w0BAQEFAASCAgC3XXpF97YijzjBZixWTk2n38GKTMWe1Vi3LMdMbfErpVXV
-# xmsOOAwE3vVMrRoVQvNxmjpVp9pa0Qk/V1jMkK49ECenzIDE+knbmbVqafLiff5X
-# 3VJ339fYGkomXWB2ngiw4b1rYKXI7qTIm/MlS9zC3j9DaV+hz/L9QabgfERsGk25
-# LHSIwbTB1zaC6WschS30L56BZ6Ty8T7OzaAlDpi/DJUct/lvbRKODneF4Y+jvZXj
-# 7f8L0+en1qG7dEjMA2WwCtAXDxaRJihZvv2QtymW/P2HZoZip8auyJmiit7syzYW
-# Gsq3TPstfSH2LVrRfEdLnBOeQDF9MI9ouefUmaFYfby2FdooJXa/oPgEYMhmYfjj
-# lZMlkvFRl10bdvLdbHVtjh0F/1d1D1ZaUc+v4zQdq63FWurNhxBA3UGPN8wIp3ni
-# 09BpdE3L0Frh81IQm+nZGwwGIH8kBhq3NCyqiOCobnZ1OkGKoo3+XYAWuvIIt2xY
-# zZeNVo0YeA6lDSEbtEg9V7cUamkHlZtR3Q0Ohr5qNOVChJcporaHF0V66RTUDFqm
-# 98SUJ28Y9sR/RjSfZw9J8Unot/Lhp9vldJP+Ui0MScThafxj9PX/FL0qVUIE6S5U
-# ymxCpJgreoYf26j9IzV8POuXCkwtFUrUv7jbSI8AIzn11IhT1oUqpA7TrD6PBw==
+# CwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMDUwMTM3NDVaMC8GCSqG
+# SIb3DQEJBDEiBCDf7JAAzYUtPmS8npegLU8ZCN5R+6eBjvCRqkZIJUET3TANBgkq
+# hkiG9w0BAQEFAASCAgAVtrzjqO3pL8FfB6czfgzHHjrQ5ReQBb3hX1/Igtg9DqRa
+# 3LGABl2SGZDj6VKv+PnI6S3hGnu/iR0VTGa5cTjlyuwJLrMaFOD4JijWB+rwCz9W
+# /D6Khd6go26R9edRm6cZM25SqIn/1fKoC7x3lIUJri+zFXqd6JjILI4WVKhbLmqX
+# 2mRM8WzxPkt328+Ru9eQrSC5tTHNzsbsTs10Cv7tichBVOS2q8BmhVW/O5SbXFDg
+# 4QYD94nUy67I82yOVR9/+T+DK2Kr5QH5U198Nog43msOO4inD6t97TnA77YtHOGx
+# 5FbEFfqe7dSPm4cZQKN9yZSiasecPvTLBMc37qDIO+J3IUVCL+3DyCcUpcOzLsTV
+# 8eGR0geAgdOnai6vjop3IVUuHLBXt/yQp2NL4ymlYcMtAVt7eqtqyrnd64kuzETD
+# 5kc/Otrn4bvt1TKRUGqs0wF7s13U9df7fjIQqAJHwvfP0Fe7zLFJZiFvLwIz1AYR
+# Td1FledkhfXCdLTZiw0k8sLsrj+KychM2W/gQOhY/xE5J8VbA37WtCp1AWKvaeyD
+# ldopu3hRXvYcBfcEJcl6FhYs7Us8eVPuV/m+YivLuHZ3OV6aQGeQ1guX5ipmsz2T
+# WTbNc7Z2D4CtxfQNT7qFRGVFwOO4a6CZy6nmdzCTHtVeOMBxS971yBj/6noLtg==
 # SIG # End signature block
