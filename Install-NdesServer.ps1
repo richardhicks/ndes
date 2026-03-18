@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 1.6.5
+.VERSION 1.7
 
 .GUID a52391cf-9c38-4304-8c9b-89f151461f3c
 
@@ -92,15 +92,18 @@
     https://www.richardhicks.com/
 
 .NOTES
-    Version:        1.6.5
+    Version:        1.7
     Creation Date:  November 29, 2023
-    Last Updated:   March 4, 2026
+    Last Updated:   March 18, 2026
     Author:         Richard Hicks
     Organization:   Richard M. Hicks Consulting, Inc.
     Contact:        rich@richardhicks.com
     Website:        https://www.richardhicks.com/
 
 #>
+
+#Requires -Version 5.1
+#Requires -RunAsAdministrator
 
 [CmdletBinding()]
 
@@ -131,9 +134,6 @@ Param (
 
 )
 
-#Requires -Version 5.1
-#Requires -RunAsAdministrator
-
 # Start transcript
 Write-Verbose 'Starting transcript...'
 Start-Transcript -Path $env:temp\Install-NdesServer.log
@@ -148,7 +148,7 @@ If ($GroupManagedServiceAccount) {
 
     If ($ServiceAccount -match $Pattern) {
 
-        Write-Verbose "Group Managed Service Account (gMSA) $ServiceAccount is valid."
+        Write-Verbose "Group Managed Service Account (gMSA) $ServiceAccount format is valid."
 
     }
 
@@ -191,6 +191,110 @@ Else {
 
     # Repeat until passwords match
     While ($PlainPassword -ne $PlainPassword2)
+
+}
+
+# Validate service account exists and can be resolved to a SID
+Write-Verbose "Validating service account '$ServiceAccount'..."
+Try {
+
+    $ntAccount = New-Object System.Security.Principal.NTAccount($ServiceAccount)
+    [void]$ntAccount.Translate([System.Security.Principal.SecurityIdentifier])
+
+}
+
+Catch {
+
+    Throw "Could not resolve account '$ServiceAccount' to a SID. Verify the account exists and the format is 'domain\user'. Error: $_"
+
+}
+
+# Grant the service account the "Log on as a service" right (not required for Group Managed Service Accounts (gMSA))
+If (-not $GroupManagedServiceAccount) {
+
+    Write-Verbose "Granting 'Log on as a service' right to PKCS service account $ServiceAccount..."
+
+    Function Grant-LogOnAsService {
+
+        Param (
+
+            [string]$ServiceAccount
+
+        )
+
+        # Resolve account name to a SID
+        Try {
+
+            $ntAccount = New-Object System.Security.Principal.NTAccount($ServiceAccount)
+            $sid = $ntAccount.Translate([System.Security.Principal.SecurityIdentifier])
+
+        }
+
+        Catch {
+
+            Stop-Transcript
+            Throw "Could not resolve account '$ServiceAccount' to a SID. Verify the account exists and the format is 'domain\user'. Error: $_"
+
+        }
+
+        # Marshal the SID to unmanaged memory
+        $sidBytes = New-Object byte[] $sid.BinaryLength
+        $sid.GetBinaryForm($sidBytes, 0)
+        $sidPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($sidBytes.Length)
+        [System.Runtime.InteropServices.Marshal]::Copy($sidBytes, 0, $sidPtr, $sidBytes.Length)
+
+        Try {
+
+            $objAttr = New-Object LsaApi+LSA_OBJECT_ATTRIBUTES
+            $objAttr.Length = [System.Runtime.InteropServices.Marshal]::SizeOf($objAttr)
+            $emptyName = New-Object LsaApi+LSA_UNICODE_STRING
+            $policyHandle = [IntPtr]::Zero
+
+            # POLICY_CREATE_ACCOUNT | POLICY_LOOKUP_NAMES = 0x00000010 | 0x00000800
+            $status = [LsaApi]::LsaOpenPolicy([ref]$emptyName, [ref]$objAttr, 0x00000810, [ref]$policyHandle)
+            If ($status -ne 0) {
+
+                $winErr = [LsaApi]::LsaNtStatusToWinError($status)
+                Throw "LsaOpenPolicy failed. Win32 error: $winErr"
+
+            }
+
+            Try {
+
+                $right = New-Object LsaApi+LSA_UNICODE_STRING
+                $right.Buffer = 'SeServiceLogonRight'
+                $right.Length = [uint16]($right.Buffer.Length * 2)
+                $right.MaximumLength = [uint16]($right.Buffer.Length * 2 + 2)
+
+                $status = [LsaApi]::LsaAddAccountRights($policyHandle, $sidPtr, @($right), 1)
+                If ($status -ne 0) {
+
+                    $winErr = [LsaApi]::LsaNtStatusToWinError($status)
+                    Throw "LsaAddAccountRights failed. Win32 error: $winErr"
+
+                }
+
+                Write-Verbose "Successfully granted 'Log on as a service' to '$ServiceAccount' (SID: $($sid.Value))."
+
+            }
+
+            Finally {
+
+                [void]([LsaApi]::LsaClose($policyHandle))
+
+            }
+
+        }
+
+        Finally {
+
+            [System.Runtime.InteropServices.Marshal]::FreeHGlobal($sidPtr)
+
+        }
+
+    }
+
+    Grant-LogOnAsService -ServiceAccount $ServiceAccount
 
 }
 
@@ -474,10 +578,10 @@ Else {
 }
 
 # SIG # Begin signature block
-# MIIf2gYJKoZIhvcNAQcCoIIfyzCCH8cCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# MIIf2wYJKoZIhvcNAQcCoIIfzDCCH8gCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAvSziO+8HGn0YO
-# HUKhE1DzuICxIS+9K8B1j8JrzaKQ66CCGpkwggNZMIIC36ADAgECAhAPuKdAuRWN
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBhfbCzaWeqWYQH
+# cfRE+/prJlZSxE8DjpllnCst5VvWqaCCGpkwggNZMIIC36ADAgECAhAPuKdAuRWN
 # A1FDvFnZ8EApMAoGCCqGSM49BAMDMGExCzAJBgNVBAYTAlVTMRUwEwYDVQQKEwxE
 # aWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xIDAeBgNVBAMT
 # F0RpZ2lDZXJ0IEdsb2JhbCBSb290IEczMB4XDTIxMDQyOTAwMDAwMFoXDTM2MDQy
@@ -619,29 +723,29 @@ Else {
 # roancJIFcbojBcxlRcGG0LIhp6GvReQGgMgYxQbV1S3CrWqZzBt1R9xJgKf47Cdx
 # VRd/ndUlQ05oxYy2zRWVFjF7mcr4C34Mj3ocCVccAvlKV9jEnstrniLvUxxVZE/r
 # ptb7IRE2lskKPIJgbaP5t2nGj/ULLi49xTcBZU8atufk+EMF/cWuiC7POGT75qaL
-# 6vdCvHlshtjdNXOCIUjsarfNZzGCBJcwggSTAgEBMHgwZDELMAkGA1UEBhMCVVMx
+# 6vdCvHlshtjdNXOCIUjsarfNZzGCBJgwggSUAgEBMHgwZDELMAkGA1UEBhMCVVMx
 # FzAVBgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMTwwOgYDVQQDEzNEaWdpQ2VydCBHbG9i
 # YWwgRzMgQ29kZSBTaWduaW5nIEVDQyBTSEEzODQgMjAyMSBDQTECEA1KNNqGkI/A
 # Eyy8gTeTryQwDQYJYIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAA
 # oQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4w
-# DAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgdtpRyYp658AtoMaPwYCCaHDJ
-# ymF8ksnlGsOKult9JbIwCwYHKoZIzj0CAQUABEcwRQIgYy+ARfbypEIOGcWzCiBj
-# jbtlWGKxkc7kfzHUgBBr5BMCIQCijTFhw9NAXaNi3UUREuIKa1TakuL9pkASfuz4
-# Rm7BrKGCAyYwggMiBgkqhkiG9w0BCQYxggMTMIIDDwIBATB9MGkxCzAJBgNVBAYT
-# AlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5jLjFBMD8GA1UEAxM4RGlnaUNlcnQg
-# VHJ1c3RlZCBHNCBUaW1lU3RhbXBpbmcgUlNBNDA5NiBTSEEyNTYgMjAyNSBDQTEC
-# EAqA7xhLjfEFgtHEdqeVdGgwDQYJYIZIAWUDBAIBBQCgaTAYBgkqhkiG9w0BCQMx
-# CwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjAzMDUwMTM3NDVaMC8GCSqG
-# SIb3DQEJBDEiBCDf7JAAzYUtPmS8npegLU8ZCN5R+6eBjvCRqkZIJUET3TANBgkq
-# hkiG9w0BAQEFAASCAgAVtrzjqO3pL8FfB6czfgzHHjrQ5ReQBb3hX1/Igtg9DqRa
-# 3LGABl2SGZDj6VKv+PnI6S3hGnu/iR0VTGa5cTjlyuwJLrMaFOD4JijWB+rwCz9W
-# /D6Khd6go26R9edRm6cZM25SqIn/1fKoC7x3lIUJri+zFXqd6JjILI4WVKhbLmqX
-# 2mRM8WzxPkt328+Ru9eQrSC5tTHNzsbsTs10Cv7tichBVOS2q8BmhVW/O5SbXFDg
-# 4QYD94nUy67I82yOVR9/+T+DK2Kr5QH5U198Nog43msOO4inD6t97TnA77YtHOGx
-# 5FbEFfqe7dSPm4cZQKN9yZSiasecPvTLBMc37qDIO+J3IUVCL+3DyCcUpcOzLsTV
-# 8eGR0geAgdOnai6vjop3IVUuHLBXt/yQp2NL4ymlYcMtAVt7eqtqyrnd64kuzETD
-# 5kc/Otrn4bvt1TKRUGqs0wF7s13U9df7fjIQqAJHwvfP0Fe7zLFJZiFvLwIz1AYR
-# Td1FledkhfXCdLTZiw0k8sLsrj+KychM2W/gQOhY/xE5J8VbA37WtCp1AWKvaeyD
-# ldopu3hRXvYcBfcEJcl6FhYs7Us8eVPuV/m+YivLuHZ3OV6aQGeQ1guX5ipmsz2T
-# WTbNc7Z2D4CtxfQNT7qFRGVFwOO4a6CZy6nmdzCTHtVeOMBxS971yBj/6noLtg==
+# DAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgUFjtF90xhYH7hBBtN9567PS/
+# 31RG+Ure1QSQXQOx/48wCwYHKoZIzj0CAQUABEgwRgIhAMdtHmotKl54coGe3v6f
+# uGyNhEbHR6/5FphHCsbz4dhjAiEAu5+2t/Egpu8ddlzt5DDxVv3D/cQtVW1rJPW/
+# 2LHgaq+hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCCAw8CAQEwfTBpMQswCQYDVQQG
+# EwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4xQTA/BgNVBAMTOERpZ2lDZXJ0
+# IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQwOTYgU0hBMjU2IDIwMjUgQ0Ex
+# AhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQCAQUAoGkwGAYJKoZIhvcNAQkD
+# MQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcNMjYwMzE4MjEyOTIyWjAvBgkq
+# hkiG9w0BCQQxIgQgZHXfjTVqCoVrkzhfXGak6fPzKXlaCwWDDL1SlFEzy4IwDQYJ
+# KoZIhvcNAQEBBQAEggIAi/F8eh5lyOx10xluhkL0+AK+j4rc6EuKEGVGrRPIsPy+
+# US375Ebh23GRTh0QDuNXJ4gatitcslahDvh1erVfnqPLDBsZ8NCBnGl/E22CPo8J
+# uiUcJpuSOq/1/06MbioqshWAyvKExv5j54twnrKhDvipCSVLbwj8CR6qmvlWeP+V
+# f/9OOUN3agWyj2N/NxPwFhnnTqceSBFannxrteaIySLKOcvGUn3SrI/gSDNZ7y5K
+# JgQfP0oJMJ8N21nqu7dIby10iuftS/E8nkqNUxb/bj8Aq4Kb/cJVKUGseHl0tI8s
+# bFQTh+UWwzWUIW6s0uQCXZaskqWYlP/iqvhLb3jHGtuJq602vwTkEL8Up9Epjzba
+# SCouq9PEbPhTBTX11c5XPyCFOimB55ebrM+Uy+HQY/+CG0mgS8jUessYFsy3433C
+# unoZ+iC3kBts3HUAisP9wUjJbqiLL13RLUXO4u5zIDSxRWZpEmbca37IgNepgYeo
+# R7OcVd1aJJW6xDeDhLVG0096Xp4mlbgJ/5d2jreVNs/E0nFm05UNoUygwLwt1cM/
+# 93HTSnpceXdbGEYS5+5PEs24N7q/CnerVXOlEv0DT5jmKMwWq61xjj5KClDvAupr
+# Nnxu1UMuPlb8sBBOf4z/4N5NStiJnwDKZMF0/P+KCwLY7W+rbb2p/J5M3NHXJL4=
 # SIG # End signature block
