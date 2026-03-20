@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 1.7
+.VERSION 1.7.1
 
 .GUID a52391cf-9c38-4304-8c9b-89f151461f3c
 
@@ -92,9 +92,9 @@
     https://www.richardhicks.com/
 
 .NOTES
-    Version:        1.7
+    Version:        1.7.1
     Creation Date:  November 29, 2023
-    Last Updated:   March 18, 2026
+    Last Updated:   March 19, 2026
     Author:         Richard Hicks
     Organization:   Richard M. Hicks Consulting, Inc.
     Contact:        rich@richardhicks.com
@@ -198,13 +198,14 @@ Else {
 Write-Verbose "Validating service account '$ServiceAccount'..."
 Try {
 
-    $ntAccount = New-Object System.Security.Principal.NTAccount($ServiceAccount)
-    [void]$ntAccount.Translate([System.Security.Principal.SecurityIdentifier])
+    $NtAccount = New-Object System.Security.Principal.NTAccount($ServiceAccount)
+    [void]$NtAccount.Translate([System.Security.Principal.SecurityIdentifier])
 
 }
 
 Catch {
 
+    Stop-Transcript
     Throw "Could not resolve account '$ServiceAccount' to a SID. Verify the account exists and the format is 'domain\user'. Error: $_"
 
 }
@@ -225,8 +226,8 @@ If (-not $GroupManagedServiceAccount) {
         # Resolve account name to a SID
         Try {
 
-            $ntAccount = New-Object System.Security.Principal.NTAccount($ServiceAccount)
-            $sid = $ntAccount.Translate([System.Security.Principal.SecurityIdentifier])
+            $NtAccount = New-Object System.Security.Principal.NTAccount($ServiceAccount)
+            $Sid = $NtAccount.Translate([System.Security.Principal.SecurityIdentifier])
 
         }
 
@@ -238,49 +239,53 @@ If (-not $GroupManagedServiceAccount) {
         }
 
         # Marshal the SID to unmanaged memory
-        $sidBytes = New-Object byte[] $sid.BinaryLength
-        $sid.GetBinaryForm($sidBytes, 0)
-        $sidPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($sidBytes.Length)
-        [System.Runtime.InteropServices.Marshal]::Copy($sidBytes, 0, $sidPtr, $sidBytes.Length)
+        $SidBytes = New-Object byte[] $Sid.BinaryLength
+        $Sid.GetBinaryForm($SidBytes, 0)
+        $SidPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($SidBytes.Length)
+        [System.Runtime.InteropServices.Marshal]::Copy($SidBytes, 0, $SidPtr, $SidBytes.Length)
 
         Try {
 
             $objAttr = New-Object LsaApi+LSA_OBJECT_ATTRIBUTES
             $objAttr.Length = [System.Runtime.InteropServices.Marshal]::SizeOf($objAttr)
-            $emptyName = New-Object LsaApi+LSA_UNICODE_STRING
-            $policyHandle = [IntPtr]::Zero
+            $EmptyName = New-Object LsaApi+LSA_UNICODE_STRING
+            $PolicyHandle = [IntPtr]::Zero
 
             # POLICY_CREATE_ACCOUNT | POLICY_LOOKUP_NAMES = 0x00000010 | 0x00000800
-            $status = [LsaApi]::LsaOpenPolicy([ref]$emptyName, [ref]$objAttr, 0x00000810, [ref]$policyHandle)
-            If ($status -ne 0) {
+            $Status = [LsaApi]::LsaOpenPolicy([ref]$EmptyName, [ref]$objAttr, 0x00000810, [ref]$PolicyHandle)
 
-                $winErr = [LsaApi]::LsaNtStatusToWinError($status)
-                Throw "LsaOpenPolicy failed. Win32 error: $winErr"
+            If ($Status -ne 0) {
+
+                $WinErr = [LsaApi]::LsaNtStatusToWinError($Status)
+                Stop-Transcript
+                Throw "LsaOpenPolicy failed. Win32 error: $WinErr"
 
             }
 
             Try {
 
-                $right = New-Object LsaApi+LSA_UNICODE_STRING
-                $right.Buffer = 'SeServiceLogonRight'
-                $right.Length = [uint16]($right.Buffer.Length * 2)
-                $right.MaximumLength = [uint16]($right.Buffer.Length * 2 + 2)
+                $Right = New-Object LsaApi+LSA_UNICODE_STRING
+                $Right.Buffer = 'SeServiceLogonRight'
+                $Right.Length = [uint16]($Right.Buffer.Length * 2)
+                $Right.MaximumLength = [uint16]($Right.Buffer.Length * 2 + 2)
 
-                $status = [LsaApi]::LsaAddAccountRights($policyHandle, $sidPtr, @($right), 1)
-                If ($status -ne 0) {
+                $Status = [LsaApi]::LsaAddAccountRights($PolicyHandle, $SidPtr, @($Right), 1)
 
-                    $winErr = [LsaApi]::LsaNtStatusToWinError($status)
-                    Throw "LsaAddAccountRights failed. Win32 error: $winErr"
+                If ($Status -ne 0) {
+
+                    $WinErr = [LsaApi]::LsaNtStatusToWinError($Status)
+                    Stop-Transcript
+                    Throw "LsaAddAccountRights failed. Win32 error: $WinErr"
 
                 }
 
-                Write-Verbose "Successfully granted 'Log on as a service' to '$ServiceAccount' (SID: $($sid.Value))."
+                Write-Verbose "Successfully granted 'Log on as a service' to '$ServiceAccount' (SID: $($Sid.Value))."
 
             }
 
             Finally {
 
-                [void]([LsaApi]::LsaClose($policyHandle))
+                [void]([LsaApi]::LsaClose($PolicyHandle))
 
             }
 
@@ -288,7 +293,7 @@ If (-not $GroupManagedServiceAccount) {
 
         Finally {
 
-            [System.Runtime.InteropServices.Marshal]::FreeHGlobal($sidPtr)
+            [System.Runtime.InteropServices.Marshal]::FreeHGlobal($SidPtr)
 
         }
 
@@ -448,8 +453,8 @@ Catch {
 If ($Fqdn) {
 
     Write-Verbose "Setting service principal name (SPN) for $Fqdn..."
-    Invoke-Command -ScriptBlock { setspn.exe -s http/$Fqdn $ServiceAccount }
-    Invoke-Command -ScriptBlock { setspn.exe -s http/$($Fqdn -Replace '(\w+)\..+', '$1') $ServiceAccount }
+    [void](& setspn.exe -s http/$Fqdn $ServiceAccount)
+    [void](& setspn.exe -s http/$($Fqdn -Replace '(\w+)\..+', '$1') $ServiceAccount)
 
 }
 
@@ -471,8 +476,8 @@ Write-Verbose 'Enabling IIS long URL support...'
 
 # Update NDES max URL length and max query string values in IIS request filtering
 Write-Verbose 'Setting URL length and max query string values...'
-[void](Invoke-Command -ScriptBlock { "$env:WinDir\system32\inetsrv\appcmd.exe set config /section:requestfiltering /requestlimits.maxurl:65534" })
-[void](Invoke-Command -ScriptBLock { "$env:WinDir\system32\inetsrv\appcmd.exe set config /section:requestfiltering /requestlimits.maxquerystring:65534" })
+Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/security/requestFiltering/requestLimits' -Name 'maxUrl' -Value 65534
+Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/security/requestFiltering/requestLimits' -Name 'maxQueryString' -Value 65534
 
 # Remove http site binding
 Write-Verbose 'Removing HTTP site binding in IIS...'
@@ -578,10 +583,10 @@ Else {
 }
 
 # SIG # Begin signature block
-# MIIf2wYJKoZIhvcNAQcCoIIfzDCCH8gCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# MIIf2QYJKoZIhvcNAQcCoIIfyjCCH8YCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBhfbCzaWeqWYQH
-# cfRE+/prJlZSxE8DjpllnCst5VvWqaCCGpkwggNZMIIC36ADAgECAhAPuKdAuRWN
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDGky/Rn2KlxoHU
+# 18aDt/cIm2LR7O6UP2n6ai5Z++1CuKCCGpkwggNZMIIC36ADAgECAhAPuKdAuRWN
 # A1FDvFnZ8EApMAoGCCqGSM49BAMDMGExCzAJBgNVBAYTAlVTMRUwEwYDVQQKEwxE
 # aWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xIDAeBgNVBAMT
 # F0RpZ2lDZXJ0IEdsb2JhbCBSb290IEczMB4XDTIxMDQyOTAwMDAwMFoXDTM2MDQy
@@ -723,29 +728,29 @@ Else {
 # roancJIFcbojBcxlRcGG0LIhp6GvReQGgMgYxQbV1S3CrWqZzBt1R9xJgKf47Cdx
 # VRd/ndUlQ05oxYy2zRWVFjF7mcr4C34Mj3ocCVccAvlKV9jEnstrniLvUxxVZE/r
 # ptb7IRE2lskKPIJgbaP5t2nGj/ULLi49xTcBZU8atufk+EMF/cWuiC7POGT75qaL
-# 6vdCvHlshtjdNXOCIUjsarfNZzGCBJgwggSUAgEBMHgwZDELMAkGA1UEBhMCVVMx
+# 6vdCvHlshtjdNXOCIUjsarfNZzGCBJYwggSSAgEBMHgwZDELMAkGA1UEBhMCVVMx
 # FzAVBgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMTwwOgYDVQQDEzNEaWdpQ2VydCBHbG9i
 # YWwgRzMgQ29kZSBTaWduaW5nIEVDQyBTSEEzODQgMjAyMSBDQTECEA1KNNqGkI/A
 # Eyy8gTeTryQwDQYJYIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAA
 # oQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4w
-# DAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgUFjtF90xhYH7hBBtN9567PS/
-# 31RG+Ure1QSQXQOx/48wCwYHKoZIzj0CAQUABEgwRgIhAMdtHmotKl54coGe3v6f
-# uGyNhEbHR6/5FphHCsbz4dhjAiEAu5+2t/Egpu8ddlzt5DDxVv3D/cQtVW1rJPW/
-# 2LHgaq+hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCCAw8CAQEwfTBpMQswCQYDVQQG
-# EwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4xQTA/BgNVBAMTOERpZ2lDZXJ0
-# IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQwOTYgU0hBMjU2IDIwMjUgQ0Ex
-# AhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQCAQUAoGkwGAYJKoZIhvcNAQkD
-# MQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcNMjYwMzE4MjEyOTIyWjAvBgkq
-# hkiG9w0BCQQxIgQgZHXfjTVqCoVrkzhfXGak6fPzKXlaCwWDDL1SlFEzy4IwDQYJ
-# KoZIhvcNAQEBBQAEggIAi/F8eh5lyOx10xluhkL0+AK+j4rc6EuKEGVGrRPIsPy+
-# US375Ebh23GRTh0QDuNXJ4gatitcslahDvh1erVfnqPLDBsZ8NCBnGl/E22CPo8J
-# uiUcJpuSOq/1/06MbioqshWAyvKExv5j54twnrKhDvipCSVLbwj8CR6qmvlWeP+V
-# f/9OOUN3agWyj2N/NxPwFhnnTqceSBFannxrteaIySLKOcvGUn3SrI/gSDNZ7y5K
-# JgQfP0oJMJ8N21nqu7dIby10iuftS/E8nkqNUxb/bj8Aq4Kb/cJVKUGseHl0tI8s
-# bFQTh+UWwzWUIW6s0uQCXZaskqWYlP/iqvhLb3jHGtuJq602vwTkEL8Up9Epjzba
-# SCouq9PEbPhTBTX11c5XPyCFOimB55ebrM+Uy+HQY/+CG0mgS8jUessYFsy3433C
-# unoZ+iC3kBts3HUAisP9wUjJbqiLL13RLUXO4u5zIDSxRWZpEmbca37IgNepgYeo
-# R7OcVd1aJJW6xDeDhLVG0096Xp4mlbgJ/5d2jreVNs/E0nFm05UNoUygwLwt1cM/
-# 93HTSnpceXdbGEYS5+5PEs24N7q/CnerVXOlEv0DT5jmKMwWq61xjj5KClDvAupr
-# Nnxu1UMuPlb8sBBOf4z/4N5NStiJnwDKZMF0/P+KCwLY7W+rbb2p/J5M3NHXJL4=
+# DAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgfo97hWu1XjdoDqaYUhg3y5iu
+# z2KHOxq6s80c0rGW29kwCwYHKoZIzj0CAQUABEYwRAIgIMVdw7Jr4iE9O4qkrI24
+# 2/e4QIGwSg8AqePy2Noo4vYCIHL0f3RNLtok5mR/hMdutb6Sqzm2CuqmBYxySVb3
+# c/9ZoYIDJjCCAyIGCSqGSIb3DQEJBjGCAxMwggMPAgEBMH0waTELMAkGA1UEBhMC
+# VVMxFzAVBgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMUEwPwYDVQQDEzhEaWdpQ2VydCBU
+# cnVzdGVkIEc0IFRpbWVTdGFtcGluZyBSU0E0MDk2IFNIQTI1NiAyMDI1IENBMQIQ
+# CoDvGEuN8QWC0cR2p5V0aDANBglghkgBZQMEAgEFAKBpMBgGCSqGSIb3DQEJAzEL
+# BgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTI2MDMyMDAyMTY1OFowLwYJKoZI
+# hvcNAQkEMSIEIHl/ayZhdlDkmVcFbVvECqnxPoeFrT7m1FmgDz2Ps6grMA0GCSqG
+# SIb3DQEBAQUABIICAKNkuJcL4xTnLt9w6ivmtoe9PrBRIZI52o+I3CL/Do3K2i++
+# STAMLgzpOCaEyMLHQFOzpgLV/tfeFcQIQ3PDuH2UbvHwYdrZLgQIn2PPX+CRanOf
+# XOSsJcirbiyIrtNPqFXrxfhJsWssgF0G5s+76naonZKnV7nWt11qX7HvCiceVhwp
+# igjAoWuTRsZClfYwYKja3+BYeHItRlUpspfaorUQtwmtxiO4nFbxfiOknZCuGGHK
+# 0IH+RrFQTxAfHAmqAV5ApKnhzCkKnQeCa/Z1KngSORSZjK+iQRmOq+xWSuB+Y07V
+# LKoTQ2qvuAHOxyATXdp0a6Ve0x4G6zp561zAlu4vbMUHwjpQUBReGCyCQU3pexYJ
+# U9SR/ezgOLzdU+egZGVaFHqP2FsCEoIRdi3zYcoQUxFREjenPs0pjZn3imFxF8dG
+# aL0Ak1VZ0rDm2RYmkjv1V9aGK0Tows8aemdklyY6ULzhc5wYYA/1E0ou3D2YPgqK
+# 46sK1xengm7vnUvtJVC+9D/K5GoKK5Qo5aOvOkUosUCiwUYV5ppw6FyVlCWK1JjN
+# MMh6ILUPEhdOgd9MiwbMHGrpPiP02LLQdYzd3uisI452iC0qcK051H4Qf2Yi/tRq
+# 5FOO5/YEjrABJkonpYM4B9rkeu5cmSmIh+VlSP9/QynW2HqvojqLLHfvOTXv
 # SIG # End signature block
