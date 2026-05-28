@@ -139,7 +139,8 @@ Licensed under the MIT License. See [LICENSE](https://github.com/richardhicks/nd
 
 ## Author
 
-**Richard Hicks**  
-Richard M. Hicks Consulting, Inc.  
-[rich@richardhicks.com](mailto:rich@richardhicks.com)  
-[https://www.richardhicks.com/](https://www.richardhicks.com/)
+**Richard M. Hicks**
+
+- Website: [https://www.richardhicks.com/](https://www.richardhicks.com/)
+- GitHub: [https://github.com/richardhicks/](https://github.com/richardhicks/)
+- X: [@richardhicks](https://x.com/richardhicks)
