@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 2.0.2
+.VERSION 2.0.3
 
 .GUID a52391cf-9c38-4304-8c9b-89f151461f3c
 
@@ -97,7 +97,7 @@
     https://www.richardhicks.com/
 
 .NOTES
-    Version:        2.0.2
+    Version:        2.0.3
     Creation Date:  November 29, 2023
     Last Updated:   May 27, 2026
     Author:         Richard Hicks
@@ -141,7 +141,7 @@ Param (
 
 )
 
-# Start transcript
+# Create log directory if it doesn't exist
 Write-Verbose 'Starting transcript...'
 $LogPath = "$env:ProgramData\RMHCI\PowerShell"
 
@@ -151,11 +151,13 @@ If (-not (Test-Path -Path $LogPath)) {
 
 }
 
+# Start transcript
 Start-Transcript -Path "$LogPath\Install-NdesServer_$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 
+# Validate Group Managed Service Account (gMSA) format
 If ($GroupManagedServiceAccount) {
 
-    # Validate Group Managed Service Account (gMSA) format
+    # Validate the gMSA account format using a regular expression. The expected format is 'domain\username$'
     $Pattern = '^[^\\]+\\[^\\]+\$$'
 
     If ($ServiceAccount -match $Pattern) {
@@ -544,7 +546,12 @@ Catch {
     # If an error occurs, display a warning, stop the transcript, and exit the script
     Write-Warning -Message $_.Exception.Message
     Write-Warning 'An error occurred while installing the NDES role. Remove the configuration using the following PowerShell command and run the script again: Uninstall-AdcsNetworkDeviceEnrollmentService -Force'
-    Write-Warning "If you receive an ERROR_PATH_NOT_FOUND message (0x80070003), run the following PowerShell command before running the script again: `& .\appcmd.exe restore backup $BackupName."
+
+    If ($_.Exception.HResult -eq -2147024893) {
+
+        Write-Warning "IMPORTANT: The IIS configuration file may be corrupt. Be sure to run the following command before running the script again: & $env:SystemDrive\Windows\System32\inetsrv\appcmd.exe restore backup $BackupName."
+
+    }
     Stop-Transcript
     Return
 
@@ -708,10 +715,10 @@ Else {
 }
 
 # SIG # Begin signature block
-# MIIk7AYJKoZIhvcNAQcCoIIk3TCCJNkCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# MIIk7QYJKoZIhvcNAQcCoIIk3jCCJNoCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDKIRWeabfSIwnP
-# wynICiuJF7/Ksru2b/NHjdmMG5+WKqCCH6YwggWNMIIEdaADAgECAhAOmxiO+dAt
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCFLqMJJktgck+D
+# x+wbKJ6dVSwMksSd/GW/tdEpLojw66CCH6YwggWNMIIEdaADAgECAhAOmxiO+dAt
 # 5+/bUOIIQBhaMA0GCSqGSIb3DQEBDAUAMGUxCzAJBgNVBAYTAlVTMRUwEwYDVQQK
 # EwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xJDAiBgNV
 # BAMTG0RpZ2lDZXJ0IEFzc3VyZWQgSUQgUm9vdCBDQTAeFw0yMjA4MDEwMDAwMDBa
@@ -880,29 +887,30 @@ Else {
 # cJIFcbojBcxlRcGG0LIhp6GvReQGgMgYxQbV1S3CrWqZzBt1R9xJgKf47CdxVRd/
 # ndUlQ05oxYy2zRWVFjF7mcr4C34Mj3ocCVccAvlKV9jEnstrniLvUxxVZE/rptb7
 # IRE2lskKPIJgbaP5t2nGj/ULLi49xTcBZU8atufk+EMF/cWuiC7POGT75qaL6vdC
-# vHlshtjdNXOCIUjsarfNZzGCBJwwggSYAgEBMH0waTELMAkGA1UEBhMCVVMxFzAV
+# vHlshtjdNXOCIUjsarfNZzGCBJ0wggSZAgEBMH0waTELMAkGA1UEBhMCVVMxFzAV
 # BgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMUEwPwYDVQQDEzhEaWdpQ2VydCBUcnVzdGVk
 # IEc0IENvZGUgU2lnbmluZyBSU0E0MDk2IFNIQTM4NCAyMDIxIENBMQIQDsYrSCrm
 # UJuvTRscProh/zANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCAViW+VRN73keRSj761fwjk
-# h/+C8Hmqu8NcLKtNqziaJDALBgcqhkjOPQIBBQAERzBFAiEAobhgTSgkx8xxbeys
-# hqVVNd1IT9bJvcBRmTPzpCjrQyoCIC0nCHkc3XdUhry8lviAe+W5Zr/Okvy2fHGX
-# 94spy8PGoYIDJjCCAyIGCSqGSIb3DQEJBjGCAxMwggMPAgEBMH0waTELMAkGA1UE
-# BhMCVVMxFzAVBgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMUEwPwYDVQQDEzhEaWdpQ2Vy
-# dCBUcnVzdGVkIEc0IFRpbWVTdGFtcGluZyBSU0E0MDk2IFNIQTI1NiAyMDI1IENB
-# MQIQCoDvGEuN8QWC0cR2p5V0aDANBglghkgBZQMEAgEFAKBpMBgGCSqGSIb3DQEJ
-# AzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTI2MDUyODAwMzMxNVowLwYJ
-# KoZIhvcNAQkEMSIEIF0j81PSafGDUOeqGBJOqMYRvkGN8jI9dhz8pK4GVwhSMA0G
-# CSqGSIb3DQEBAQUABIICAMsMI5+fG3p5N6ZleFAp1zhuFbXnhA3KKmHFl0SK2KaK
-# N0B15wzQ4LTFHOWDadDfkAWW1aII6fHcxscBN6D0WBgjshGwy20RwOAbLTa2q0KA
-# lp1u8BgrLtTtfoKOcWwUrdBFEtgnZ52JqY7h4sa+ebMcuMKFjOc+HaBr+caBn/6k
-# QjdbrK0QZ3byMcvItNWetr4ul3sW+BtMK4LpLTO8JP3K13JHUno104jbtNnpYaVY
-# eBzHwQX/W0U1U88usphEtSv3jwfwM9aLjae/EMEs25SBHEYeD4kjYa4SlPB+IFgI
-# j14M6eqmY9P2wJGcLs8NmjGbFIAU5GxYqDpSVwYgfMigonV7rAvrsD+yVZ56hRNx
-# tx/VsSG1+uizQ5zn/P+x4yHBGi88RjmUWbMB7a4r8ULyzn0cLxZ54lQVhsjY54ip
-# vsgx9HFbnp8mUY/rxrThC5+dMiAVWaro7bOaVZ/b45K9ZR1GRe2EFDpfpkQuqOYi
-# vrSgsxgw0kJMFc8WdXrszpHzce46TMW0yW0clHROlhk4K2iGI9cemiDzz3JdBDN6
-# 4AR+2enEBHkDZDpJZDiEBwPlRnfYo96jFFr1/7+igUhxOu7aPvd1JQ5nZRxXolh4
-# LtPUkcMRQZTFsMP3skcw2t8lkUkG9wLAzM3/z8H2Pur0aFvxYFlx3XvGeW+s5ZZP
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCB73R5y8nEJ979DZGeyiIUJ
+# H5cWiQrk+aADpAZGYEmULjALBgcqhkjOPQIBBQAESDBGAiEA3nggXScYtDf5L/XT
+# N91OIYhUyw92m3JTssdaoH41gFoCIQCseU5oml3hRzGf3TxWSRgILONLvuTGvY9W
+# UUGgqAr4G6GCAyYwggMiBgkqhkiG9w0BCQYxggMTMIIDDwIBATB9MGkxCzAJBgNV
+# BAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5jLjFBMD8GA1UEAxM4RGlnaUNl
+# cnQgVHJ1c3RlZCBHNCBUaW1lU3RhbXBpbmcgUlNBNDA5NiBTSEEyNTYgMjAyNSBD
+# QTECEAqA7xhLjfEFgtHEdqeVdGgwDQYJYIZIAWUDBAIBBQCgaTAYBgkqhkiG9w0B
+# CQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjA1MjgwMzM5MDVaMC8G
+# CSqGSIb3DQEJBDEiBCBuFSq2Y10/0vmRzvu/4BHY0HaRSDHgsfXnoxF5iZkLZTAN
+# BgkqhkiG9w0BAQEFAASCAgB6S+1KACcWSSkqCEV7DQZh6Nd/ObbJZLsoQlKsXe+H
+# H+ORoJba11gIx6nkEtGqHU4W/Yz2oQpx0xpcBtVT+VWoFRdDR5uQgMkuIU7WM+BH
+# Xe5BbyFG6HWlvAwikI5Z0DDuKQnKj//LzCG/Wb39c6CUoQS+FGB5BKFKimOjpTJO
+# nTGwdg3eCphwI/PWs+LehSs6wiRFUSkXCH/FXPCtfqmVrjTHYcZX3ygHb7g/yUzp
+# AQ534N+LlWplXzsrgsaJ4YtMDCwYjr2ubyvk/4EX1RKW1upajk0jLnA6tvDERXCW
+# LJjfHW00o69utliVzpQImc+H50nLrFaRdW4ei3PNY84Np5ls4QLL5/0qqw6DtBkP
+# Omatod1WZg7pXO0DSTNw4Rj6d8MGF/gKyt6/33Zzc5xiV+ZSORnzbNSjpjX2T29u
+# a2BPFP+/B1HKzauMWZIs3bbYF6xldSKJEhfiQJQ2HDtlfltcalWiOM4gtmhlAJug
+# J2j1ZxV4k2mNaSd7b+XS2+YsLEsUNoEDf/A6Jw0HslPPjthReTToWK75DKEiSHjU
+# LQ+8+IqOp1+J1hYO3nrQVnJg/8IzQ1Zhf2y/UOJbBw+WDwuj0Sf+v+gdgK758xsq
+# JGfmtPushKuE8Felg+tta3SMoms84mWnV+vWa+XxZ98Mifby2RSJsypZcXGd07DA
+# 9g==
 # SIG # End signature block
