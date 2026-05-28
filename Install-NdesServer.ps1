@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 2.0.1
+.VERSION 2.0.2
 
 .GUID a52391cf-9c38-4304-8c9b-89f151461f3c
 
@@ -97,9 +97,9 @@
     https://www.richardhicks.com/
 
 .NOTES
-    Version:        2.0.1
+    Version:        2.0.2
     Creation Date:  November 29, 2023
-    Last Updated:   May 25, 2026
+    Last Updated:   May 27, 2026
     Author:         Richard Hicks
     Organization:   Richard M. Hicks Consulting, Inc.
     Contact:        rich@richardhicks.com
@@ -241,6 +241,58 @@ Else {
 If (-not $GroupManagedServiceAccount) {
 
     Write-Verbose "Granting 'Log on as a service' right to NDES service account $ServiceAccount..."
+
+    If (-not ([System.Management.Automation.PSTypeName]'LsaApi').Type) {
+
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public class LsaApi
+{
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LSA_UNICODE_STRING
+    {
+        public ushort Length;
+        public ushort MaximumLength;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string Buffer;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LSA_OBJECT_ATTRIBUTES
+    {
+        public int Length;
+        public IntPtr RootDirectory;
+        public LSA_UNICODE_STRING ObjectName;
+        public uint Attributes;
+        public IntPtr SecurityDescriptor;
+        public IntPtr SecurityQualityOfService;
+    }
+
+    [DllImport("advapi32.dll", SetLastError = true, PreserveSig = true)]
+    public static extern uint LsaOpenPolicy(
+        ref LSA_UNICODE_STRING SystemName,
+        ref LSA_OBJECT_ATTRIBUTES ObjectAttributes,
+        uint DesiredAccess,
+        out IntPtr PolicyHandle);
+
+    [DllImport("advapi32.dll", SetLastError = true, PreserveSig = true)]
+    public static extern uint LsaAddAccountRights(
+        IntPtr PolicyHandle,
+        IntPtr AccountSid,
+        LSA_UNICODE_STRING[] UserRights,
+        uint CountOfRights);
+
+    [DllImport("advapi32.dll", SetLastError = true, PreserveSig = true)]
+    public static extern uint LsaClose(IntPtr ObjectHandle);
+
+    [DllImport("advapi32.dll", SetLastError = true, PreserveSig = true)]
+    public static extern uint LsaNtStatusToWinError(uint Status);
+}
+'@
+
+    }
 
     Function Grant-LogOnAsService {
 
@@ -656,10 +708,10 @@ Else {
 }
 
 # SIG # Begin signature block
-# MIIk6wYJKoZIhvcNAQcCoIIk3DCCJNgCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# MIIk7AYJKoZIhvcNAQcCoIIk3TCCJNkCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAwhdiaLKdgU4Y6
-# breNPjYceC5eT7cH9+W1JoXlmmeQo6CCH6YwggWNMIIEdaADAgECAhAOmxiO+dAt
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDKIRWeabfSIwnP
+# wynICiuJF7/Ksru2b/NHjdmMG5+WKqCCH6YwggWNMIIEdaADAgECAhAOmxiO+dAt
 # 5+/bUOIIQBhaMA0GCSqGSIb3DQEBDAUAMGUxCzAJBgNVBAYTAlVTMRUwEwYDVQQK
 # EwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xJDAiBgNV
 # BAMTG0RpZ2lDZXJ0IEFzc3VyZWQgSUQgUm9vdCBDQTAeFw0yMjA4MDEwMDAwMDBa
@@ -828,29 +880,29 @@ Else {
 # cJIFcbojBcxlRcGG0LIhp6GvReQGgMgYxQbV1S3CrWqZzBt1R9xJgKf47CdxVRd/
 # ndUlQ05oxYy2zRWVFjF7mcr4C34Mj3ocCVccAvlKV9jEnstrniLvUxxVZE/rptb7
 # IRE2lskKPIJgbaP5t2nGj/ULLi49xTcBZU8atufk+EMF/cWuiC7POGT75qaL6vdC
-# vHlshtjdNXOCIUjsarfNZzGCBJswggSXAgEBMH0waTELMAkGA1UEBhMCVVMxFzAV
+# vHlshtjdNXOCIUjsarfNZzGCBJwwggSYAgEBMH0waTELMAkGA1UEBhMCVVMxFzAV
 # BgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMUEwPwYDVQQDEzhEaWdpQ2VydCBUcnVzdGVk
 # IEc0IENvZGUgU2lnbmluZyBSU0E0MDk2IFNIQTM4NCAyMDIxIENBMQIQDsYrSCrm
 # UJuvTRscProh/zANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCCP2C4lyNxLmCxe07CfU1ts
-# rE1mfk7Wnrers+peHtv/kTALBgcqhkjOPQIBBQAERjBEAiBKzyCxsNjQ6DhY9v73
-# aOCIGn29aOLfR9PyPj2/YlTlzQIgMpIR0RZhgTqRZDcyT/a63KRJ/iHcng/nUeGY
-# PyP9nVqhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCCAw8CAQEwfTBpMQswCQYDVQQG
-# EwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4xQTA/BgNVBAMTOERpZ2lDZXJ0
-# IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQwOTYgU0hBMjU2IDIwMjUgQ0Ex
-# AhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQCAQUAoGkwGAYJKoZIhvcNAQkD
-# MQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcNMjYwNTI1MjEzMzAxWjAvBgkq
-# hkiG9w0BCQQxIgQgaiacNgeZecCRcPyl7SZOAhVomoIYI8qsZF+Mi4EuBUUwDQYJ
-# KoZIhvcNAQEBBQAEggIAvEnwqMcHBvp86PyzuCQ/gI/+4OoEEblA2yi2Ox8aMseS
-# lgSQgcA9IictIATjdF1QSSUFX1UO7JQQM0J0GBIA2XKJkjRtBO4atB5uin65m9d0
-# Fx7U2H566BUJgADNmjRX+Db3cG5+O1affAUdWFEXxtucD27SF3WrhRMjVmyaPHn5
-# nGxcJ1NtsbpFwqf0VOv0xOgCGxF64OhaC4UQqKYM6tfQaVqih10Sgt+KOyQ2wVCU
-# qeXTNlbYw0EjmiVBk4senegEMRZDc60dJdNgMOZGsk1m+pgFsMl/mCCIvByeHskY
-# eXnpc8kwzvcSU7XES1kvELJ9+G6mc53ubgmh9xLY/NxgY2DgQky37Mhw+Z/zX8OB
-# 030zEjDvs1gviL4md4RaJ3jrtMtkkFFJUZKuZkKYvMovt0OWB6rCtlPHc4VfW1ZW
-# QVhV6q3NA/XxX+bT8+18v7DH0Zb4FQmSa6WEruFYl+pj4+HLd0CW22HN+zPUbZxM
-# nEBAW+DjDcwyWzOcZqrcahl2PTKrIL+W1VONW5CSESbtbtTa+laHjbyLvBJO6tyU
-# DcqJ/ZMDMNKJjq7ILyiE6Fg78GPEfYzy4NvUqCKJomiBeVDy6GM3M7WPMsb27r7e
-# o2w8WRTjAupEIVhZRqiDKKDuIXlsstFWY3bBhLYnrl4g333MO4FCdYNNw20zjgg=
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCAViW+VRN73keRSj761fwjk
+# h/+C8Hmqu8NcLKtNqziaJDALBgcqhkjOPQIBBQAERzBFAiEAobhgTSgkx8xxbeys
+# hqVVNd1IT9bJvcBRmTPzpCjrQyoCIC0nCHkc3XdUhry8lviAe+W5Zr/Okvy2fHGX
+# 94spy8PGoYIDJjCCAyIGCSqGSIb3DQEJBjGCAxMwggMPAgEBMH0waTELMAkGA1UE
+# BhMCVVMxFzAVBgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMUEwPwYDVQQDEzhEaWdpQ2Vy
+# dCBUcnVzdGVkIEc0IFRpbWVTdGFtcGluZyBSU0E0MDk2IFNIQTI1NiAyMDI1IENB
+# MQIQCoDvGEuN8QWC0cR2p5V0aDANBglghkgBZQMEAgEFAKBpMBgGCSqGSIb3DQEJ
+# AzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTI2MDUyODAwMzMxNVowLwYJ
+# KoZIhvcNAQkEMSIEIF0j81PSafGDUOeqGBJOqMYRvkGN8jI9dhz8pK4GVwhSMA0G
+# CSqGSIb3DQEBAQUABIICAMsMI5+fG3p5N6ZleFAp1zhuFbXnhA3KKmHFl0SK2KaK
+# N0B15wzQ4LTFHOWDadDfkAWW1aII6fHcxscBN6D0WBgjshGwy20RwOAbLTa2q0KA
+# lp1u8BgrLtTtfoKOcWwUrdBFEtgnZ52JqY7h4sa+ebMcuMKFjOc+HaBr+caBn/6k
+# QjdbrK0QZ3byMcvItNWetr4ul3sW+BtMK4LpLTO8JP3K13JHUno104jbtNnpYaVY
+# eBzHwQX/W0U1U88usphEtSv3jwfwM9aLjae/EMEs25SBHEYeD4kjYa4SlPB+IFgI
+# j14M6eqmY9P2wJGcLs8NmjGbFIAU5GxYqDpSVwYgfMigonV7rAvrsD+yVZ56hRNx
+# tx/VsSG1+uizQ5zn/P+x4yHBGi88RjmUWbMB7a4r8ULyzn0cLxZ54lQVhsjY54ip
+# vsgx9HFbnp8mUY/rxrThC5+dMiAVWaro7bOaVZ/b45K9ZR1GRe2EFDpfpkQuqOYi
+# vrSgsxgw0kJMFc8WdXrszpHzce46TMW0yW0clHROlhk4K2iGI9cemiDzz3JdBDN6
+# 4AR+2enEBHkDZDpJZDiEBwPlRnfYo96jFFr1/7+igUhxOu7aPvd1JQ5nZRxXolh4
+# LtPUkcMRQZTFsMP3skcw2t8lkUkG9wLAzM3/z8H2Pur0aFvxYFlx3XvGeW+s5ZZP
 # SIG # End signature block
