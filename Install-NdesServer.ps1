@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 2.0.3
+.VERSION 3.0
 
 .GUID a52391cf-9c38-4304-8c9b-89f151461f3c
 
@@ -28,6 +28,9 @@
 .PARAMETER RaName
     The name of the NDES registration authority (RA).
 
+.PARAMETER CaConfig
+    The configuration of the CA to use for NDES. The syntax is 'CA server FQDN\CA common name'. Use certutil.exe -dump to find the CA configuration.
+
 .PARAMETER EnrollmentTemplate
     The name of the NDES certificate template. This is different than the display name of the template shown in the Certification Authority (CA) management console.
 
@@ -35,13 +38,10 @@
     The thumbprint of the TLS certificate to use for the NDES service.
 
 .PARAMETER ServiceAccount
-    The domain account to use for the NDES service.
+    The service account to use for the NDES service. Use the format domain\username. If using a Group Managed Service Account (gMSA), use the format domain\username$ and include the GroupManagedServiceAccount parameter. For standard domain service accounts, the script prompts for the account password and validates it against the domain.
 
 .PARAMETER GroupManagedServiceAccount
     This parameter is optional. If specified, the NDES service will be configured to use a Group Managed Service Account (gMSA) for the SCEP IIS application pool.
-
-.PARAMETER CaConfig
-    The configuration of the CA to use for NDES. The syntax is 'CA server FQDN\CA common name'. Use certutil.exe -dump to find the CA configuration.
 
 .PARAMETER Fqdn
     This parameter is optional. It is the custom fully qualified domain name (FQDN) for the NDES service when configured behind a load balancer.
@@ -59,27 +59,27 @@
     This parameter is optional. If specified, the server will be restarted after the NDES role is installed and configured.
 
 .EXAMPLE
-    .\Install-NdesServer.ps1 -RaName 'Richard M. Hicks Consulting NDES RA' -Template 'IntuneSCEPEnrollment' -Thumbprint 'B9413E2A1B2F5BFA0AD8A16118198ACC256D0CF9' -ServiceAccount 'corp\svc_ndes' -CaConfig 'ca1.corp.example.net\Richard M. Hicks Consulting Issuing CA' -Restart
+    .\Install-NdesServer.ps1 -RaName 'Richard M. Hicks Consulting NDES RA' -CaConfig 'ca1.corp.example.net\Richard M. Hicks Consulting Issuing CA' -Template 'IntuneSCEPEnrollment' -Thumbprint 'B9413E2A1B2F5BFA0AD8A16118198ACC256D0CF9' -ServiceAccount 'corp\svc_ndes' -Restart
 
     This example installs and configures the NDES role on the local server using the specified parameters. The server will be restarted after the NDES role is installed and configured.
 
 .EXAMPLE
-    .\Install-NdesServer.ps1 -RaName 'Richard M. Hicks Consulting NDES RA' -Template 'IntuneSCEPEnrollment' -Thumbprint 'B9413E2A1B2F5BFA0AD8A16118198ACC256D0CF9' -ServiceAccount 'corp\gmsa_ndes$' -CaConfig 'ca1.corp.example.net\Richard M. Hicks Consulting Issuing CA' -GroupManagedServiceAccount
+    .\Install-NdesServer.ps1 -RaName 'Richard M. Hicks Consulting NDES RA' -CaConfig 'ca1.corp.example.net\Richard M. Hicks Consulting Issuing CA' -Template 'IntuneSCEPEnrollment' -Thumbprint 'B9413E2A1B2F5BFA0AD8A16118198ACC256D0CF9' -ServiceAccount 'corp\gmsa_ndes$' -GroupManagedServiceAccount
 
     This example installs and configures the NDES role on the local server using a Group Managed Service Account (gMSA) for the SCEP IIS application pool.
 
 .EXAMPLE
-    .\Install-NdesServer.ps1 -RaName 'Richard M. Hicks Consulting NDES RA' -Template 'IntuneSCEPEnrollment' -Thumbprint 'B9413E2A1B2F5BFA0AD8A16118198ACC256D0CF9' -ServiceAccount 'corp\gmsa_ndes$' -CaConfig 'ca1.corp.example.net\Richard M. Hicks Consulting Issuing CA' -GroupManagedServiceAccount -AutoEnrollment
+    .\Install-NdesServer.ps1 -RaName 'Richard M. Hicks Consulting NDES RA' -CaConfig 'ca1.corp.example.net\Richard M. Hicks Consulting Issuing CA' -Template 'IntuneSCEPEnrollment' -Thumbprint 'B9413E2A1B2F5BFA0AD8A16118198ACC256D0CF9' -ServiceAccount 'corp\gmsa_ndes$' -GroupManagedServiceAccount -AutoEnrollment
 
     This example installs and configures the NDES role on the local server using a Group Managed Service Account (gMSA) for the SCEP IIS application pool and creates a scheduled task to restart the SCEP IIS application pool on certificate renewal events.
 
 .EXAMPLE
-    .\Install-NdesServer.ps1 -RaName 'Richard M. Hicks Consulting NDES RA' -Template 'IntuneSCEPEnrollment' -Thumbprint 'B9413E2A1B2F5BFA0AD8A16118198ACC256D0CF9' -ServiceAccount 'corp\svc_ndes' -CaConfig 'ca1.corp.example.net\Richard M. Hicks Consulting Issuing CA' -Fqdn 'ndes.corp.example.net'
+    .\Install-NdesServer.ps1 -RaName 'Richard M. Hicks Consulting NDES RA' -CaConfig 'ca1.corp.example.net\Richard M. Hicks Consulting Issuing CA' -Template 'IntuneSCEPEnrollment' -Thumbprint 'B9413E2A1B2F5BFA0AD8A16118198ACC256D0CF9' -ServiceAccount 'corp\svc_ndes' -Fqdn 'ndes.corp.example.net'
 
     This example installs and configures the NDES role on the local server using the specified parameters and a custom FQDN for the NDES service.
 
 .EXAMPLE
-    .\Install-NdesServer.ps1 -RaName 'Richard M. Hicks Consulting NDES RA' -Template 'IntuneSCEPEnrollment' -Thumbprint 'B9413E2A1B2F5BFA0AD8A16118198ACC256D0CF9' -ServiceAccount 'corp\svc_ndes' -CaConfig 'ca1.corp.example.net\Richard M. Hicks Consulting Issuing CA' -RemoveLegacyCertificates
+    .\Install-NdesServer.ps1 -RaName 'Richard M. Hicks Consulting NDES RA' -CaConfig 'ca1.corp.example.net\Richard M. Hicks Consulting Issuing CA' -Template 'IntuneSCEPEnrollment' -Thumbprint 'B9413E2A1B2F5BFA0AD8A16118198ACC256D0CF9' -ServiceAccount 'corp\svc_ndes' -RemoveLegacyCertificates
 
     This example installs and configures the NDES role on the local server using the specified parameters and removes any legacy certificates issued to the NDES server.
 
@@ -97,9 +97,9 @@
     https://www.richardhicks.com/
 
 .NOTES
-    Version:        2.0.3
+    Version:        3.0
     Creation Date:  November 29, 2023
-    Last Updated:   May 27, 2026
+    Last Updated:   July 2, 2026
     Author:         Richard Hicks
     Organization:   Richard M. Hicks Consulting, Inc.
     Contact:        rich@richardhicks.com
@@ -110,13 +110,16 @@
 #Requires -Version 5.1
 #Requires -RunAsAdministrator
 
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess)]
 
 Param (
 
     [Parameter(Mandatory, HelpMessage = 'Enter a name for the NDES registration authority (RA)')]
     [ValidateNotNullOrEmpty()]
     [string]$RaName,
+    [Parameter(Mandatory, HelpMessage = 'Enter the configuration of the certification authority (CA) to use for NDES. The syntax is `[CA server FQDN`]\`[CA common name`]. Use certutil.exe -dump to find the CA configuration')]
+    [ValidateNotNullOrEmpty()]
+    [string]$CaConfig,
     [Parameter(Mandatory, HelpMessage = 'Enter the name of the NDES certificate enrollment template')]
     [ValidateNotNullOrEmpty()]
     [Alias('Template')]
@@ -130,9 +133,6 @@ Param (
     [ValidateNotNullOrEmpty()]
     [string]$ServiceAccount,
     [switch]$GroupManagedServiceAccount,
-    [Parameter(Mandatory, HelpMessage = 'Enter the configuration of the certification authority (CA) to use for NDES. The syntax is `[CA server FQDN`]\`[CA common name`]. Use certutil.exe -dump to find the CA configuration')]
-    [ValidateNotNullOrEmpty()]
-    [string]$CaConfig,
     [string]$Fqdn,
     [switch]$RemoveLegacyCertificates,
     [switch]$RemoveDefaultTemplates,
@@ -141,112 +141,209 @@ Param (
 
 )
 
+# Ensure verbose output is always displayed and captured in the transcript
+$VerbosePreference = 'Continue'
+
 # Create log directory if it doesn't exist
 Write-Verbose 'Starting transcript...'
 $LogPath = "$env:ProgramData\RMHCI\PowerShell"
 
 If (-not (Test-Path -Path $LogPath)) {
 
-    [void](New-Item -Path $LogPath -ItemType Directory -Force)
+    # Logging is exempt from -WhatIf so the transcript can always be created
+    [void](New-Item -Path $LogPath -ItemType Directory -Force -WhatIf:$False)
 
 }
 
-# Start transcript
-Start-Transcript -Path "$LogPath\Install-NdesServer_$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+# Start transcript. Exempt from -WhatIf so -WhatIf runs are always logged and Stop-Transcript in the Finally block always succeeds
+Start-Transcript -Path "$LogPath\Install-NdesServer_$(Get-Date -Format 'yyyyMMdd-HHmmss').log" -WhatIf:$False
 
-# Validate Group Managed Service Account (gMSA) format
-If ($GroupManagedServiceAccount) {
+# Record the invocation and bound parameters in the transcript for troubleshooting
+Write-Verbose "Invocation: $($MyInvocation.Line.Trim())"
+Write-Verbose 'Bound parameters:'
+ForEach ($Parameter in $PSBoundParameters.GetEnumerator()) {
 
-    # Validate the gMSA account format using a regular expression. The expected format is 'domain\username$'
-    $Pattern = '^[^\\]+\\[^\\]+\$$'
+    Write-Verbose "  -$($Parameter.Key): $($Parameter.Value)"
 
-    If ($ServiceAccount -match $Pattern) {
+}
 
-        Write-Verbose "Group Managed Service Account (gMSA) $ServiceAccount format is valid."
+# Begin configuration
+Try {
 
-    }
+    # Honor -WhatIf and -Confirm for the script as a whole
+    If (-not $PSCmdlet.ShouldProcess($env:ComputerName, 'Install and configure the NDES role')) {
 
-    Else {
-
-        # Display a warning and exit if the gMSA account isn't formatted correctly
-        Write-Warning "The gMSA account $ServiceAccount is not formatted correctly. The correct format is <domain>\<user>$."
-        Stop-Transcript
         Return
 
     }
 
-}
+    # Validate the service account
+    If ($GroupManagedServiceAccount) {
 
-Else {
+        # Validate the gMSA account format using a regular expression. The expected format is 'domain\username$'
+        $Pattern = '^[^\\]+\\[^\\]+\$$'
 
-    # Prompt for NDES service account password if not using a Group Managed Service Account (gMSA) and validate
-    Do {
+        If ($ServiceAccount -match $Pattern) {
 
-        # Prompt user for password and confirmation
-        $Password = Read-Host 'Enter the NDES service account password' -AsSecureString
-        $Password2 = Read-Host 'Confirm password' -AsSecureString
+            Write-Verbose "Group Managed Service Account (gMSA) $ServiceAccount format is valid."
 
-        # Convert both secure strings to plain text for comparison
-        $PlainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password))
-        $PlainPassword2 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password2))
+        }
 
-        # Check if passwords match
-        If ($PlainPassword -ne $PlainPassword2) {
+        Else {
 
-            Write-Warning 'Passwords do not match. Please try again.'
+            # Display a warning and exit if the gMSA account isn't formatted correctly
+            Write-Warning "The gMSA account $ServiceAccount is not formatted correctly. The correct format is <domain>\<user>$."
+            Return
 
         }
 
     }
 
-    # Repeat until passwords match
-    While ($PlainPassword -ne $PlainPassword2)
+    Else {
 
-}
+        # A trailing $ indicates a gMSA. Exit rather than prompt for a password a gMSA doesn't have
+        If ($ServiceAccount -match '\$$') {
 
-# Validate service account exists and can be resolved to a SID
-Write-Verbose "Validating service account '$ServiceAccount'..."
-Try {
+            Write-Warning "The service account $ServiceAccount appears to be a Group Managed Service Account (gMSA). Run the script again with the GroupManagedServiceAccount parameter."
+            Return
 
-    $NtAccount = New-Object System.Security.Principal.NTAccount($ServiceAccount)
-    [void]$NtAccount.Translate([System.Security.Principal.SecurityIdentifier])
+        }
 
-}
+        # Validate the service account format using a regular expression. The expected format is 'domain\username'
+        If ($ServiceAccount -notmatch '^[^\\]+\\[^\\]+$') {
 
-Catch {
+            # Display a warning and exit if the service account isn't formatted correctly
+            Write-Warning "The service account $ServiceAccount is not formatted correctly. The correct format is <domain>\<user>."
+            Return
 
-    Stop-Transcript
-    Throw "Could not resolve account '$ServiceAccount' to a SID. Verify the account exists and the format is 'domain\user'. Error: $_"
+        }
 
-}
+        # Prompt for the NDES service account password
+        $Credential = Get-Credential -UserName $ServiceAccount -Message 'Enter the password for the NDES service account'
 
-# Validate TLS certificate
-Write-Verbose "Validating TLS certificate with thumbprint $Thumbprint..."
-$Certificate = Get-ChildItem -Path cert:\LocalMachine\My\$Thumbprint -ErrorAction SilentlyContinue
+        If ($Null -eq $Credential) {
 
-If ($Null -eq $Certificate) {
+            # Display a warning and exit if the credential prompt was cancelled
+            Write-Warning 'No password supplied for the NDES service account. Run the script again and enter the password when prompted.'
+            Return
 
-    # Display a warning and exit if the certificate isn't found
-    Write-Warning "Unable to find certificate with thumbprint $Thumbprint."
-    Stop-Transcript
-    Return
+        }
 
-}
+        # Validate the NDES service account credentials against the domain
+        Write-Verbose "Validating credentials for NDES service account $ServiceAccount..."
+        Add-Type -AssemblyName System.DirectoryServices.AccountManagement
+        $PrincipalContext = $Null
 
-Else {
+        Try {
+
+            # Validate using the account name from the ServiceAccount parameter so it remains authoritative even if the username was altered at the credential prompt
+            # GetNetworkCredential exposes the password as plain text in process memory only for the duration of validation
+            $SamAccountName = ($ServiceAccount -split '\\')[1]
+            $PrincipalContext = [System.DirectoryServices.AccountManagement.PrincipalContext]::new('Domain')
+            $CredentialsValid = $PrincipalContext.ValidateCredentials($SamAccountName, $Credential.GetNetworkCredential().Password, 'Negotiate')
+
+        }
+
+        Catch {
+
+            Throw "Unable to validate credentials for '$ServiceAccount'. Verify the server is joined to the domain and a domain controller is reachable. Error: $_"
+
+        }
+
+        Finally {
+
+            # Dispose of the principal context to release the underlying directory connection
+            If ($PrincipalContext) {
+
+                $PrincipalContext.Dispose()
+
+            }
+
+        }
+
+        If (-not $CredentialsValid) {
+
+            # Display a warning and exit if credential validation fails
+            Write-Warning "The credentials for $ServiceAccount are invalid. Verify the username and password and run the script again."
+            Return
+
+        }
+
+        Write-Verbose "Credentials for NDES service account $ServiceAccount validated successfully."
+
+        # Extract the password as a secure string for NDES service configuration
+        $Password = $Credential.Password
+
+    }
+
+    # Resolve the service account to a SID. This confirms the account exists in the domain (the only
+    # existence check for gMSAs at this point) and is required later to grant standard accounts the
+    # 'Log on as a service' right.
+    Write-Verbose "Validating service account '$ServiceAccount'..."
+    Try {
+
+        $NtAccount = New-Object System.Security.Principal.NTAccount($ServiceAccount)
+        $ServiceAccountSid = $NtAccount.Translate([System.Security.Principal.SecurityIdentifier])
+
+    }
+
+    Catch {
+
+        Throw "Could not resolve account '$ServiceAccount' to a SID. Verify the account exists and the format is 'domain\user'. Error: $_"
+
+    }
+
+    # Validate TLS certificate
+    Write-Verbose "Validating TLS certificate with thumbprint $Thumbprint..."
+    $Certificate = Get-ChildItem -Path cert:\LocalMachine\My\$Thumbprint -ErrorAction SilentlyContinue
+
+    If ($Null -eq $Certificate) {
+
+        # Display a warning and exit if the certificate isn't found
+        Write-Warning "Unable to find certificate with thumbprint $Thumbprint."
+        Return
+
+    }
 
     Write-Verbose "Certificate with thumbprint $Thumbprint found."
 
-}
+    # Verify the certificate has an associated private key
+    If (-not $Certificate.HasPrivateKey) {
 
-# Grant the service account the "Log on as a service" right (not required for Group Managed Service Accounts (gMSA))
-If (-not $GroupManagedServiceAccount) {
+        Write-Warning "Certificate with thumbprint $Thumbprint does not have an associated private key."
+        Return
 
-    Write-Verbose "Granting 'Log on as a service' right to NDES service account $ServiceAccount..."
+    }
 
-    If (-not ([System.Management.Automation.PSTypeName]'LsaApi').Type) {
+    # Verify the certificate is time valid
+    $Now = Get-Date
 
-        Add-Type -TypeDefinition @'
+    If (($Certificate.NotBefore -gt $Now) -or ($Certificate.NotAfter -lt $Now)) {
+
+        Write-Warning "Certificate with thumbprint $Thumbprint is expired or not yet valid (valid from $($Certificate.NotBefore) to $($Certificate.NotAfter))."
+        Return
+
+    }
+
+    # Verify the certificate supports server authentication. A certificate without an EKU extension is valid for all purposes
+    $ServerAuthOid = '1.3.6.1.5.5.7.3.1'
+    $Eku = $Certificate.Extensions | Where-Object { $_ -is [System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension] }
+
+    If ($Eku -and -not ($Eku.EnhancedKeyUsages | Where-Object { $_.Value -eq $ServerAuthOid })) {
+
+        Write-Warning "Certificate with thumbprint $Thumbprint does not include the Server Authentication enhanced key usage."
+        Return
+
+    }
+
+    # Grant the service account the "Log on as a service" right (not required for Group Managed Service Accounts (gMSA))
+    If (-not $GroupManagedServiceAccount) {
+
+        Write-Verbose "Granting 'Log on as a service' right to NDES service account $ServiceAccount..."
+
+        If (-not ([System.Management.Automation.PSTypeName]'LsaApi').Type) {
+
+            Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 
@@ -294,431 +391,471 @@ public class LsaApi
 }
 '@
 
-    }
-
-    Function Grant-LogOnAsService {
-
-        Param (
-
-            [string]$ServiceAccount
-
-        )
-
-        # Resolve account name to a SID
-        Try {
-
-            $NtAccount = New-Object System.Security.Principal.NTAccount($ServiceAccount)
-            $Sid = $NtAccount.Translate([System.Security.Principal.SecurityIdentifier])
-
         }
 
-        Catch {
+        Function Grant-LogOnAsService {
 
-            Stop-Transcript
-            Throw "Could not resolve account '$ServiceAccount' to a SID. Verify the account exists and the format is 'domain\user'. Error: $_"
+            Param (
 
-        }
+                [System.Security.Principal.SecurityIdentifier]$Sid
 
-        # Marshal the SID to unmanaged memory
-        $SidBytes = New-Object byte[] $Sid.BinaryLength
-        $Sid.GetBinaryForm($SidBytes, 0)
-        $SidPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($SidBytes.Length)
-        [System.Runtime.InteropServices.Marshal]::Copy($SidBytes, 0, $SidPtr, $SidBytes.Length)
+            )
 
-        Try {
-
-            $objAttr = New-Object LsaApi+LSA_OBJECT_ATTRIBUTES
-            $objAttr.Length = [System.Runtime.InteropServices.Marshal]::SizeOf($objAttr)
-            $EmptyName = New-Object LsaApi+LSA_UNICODE_STRING
-            $PolicyHandle = [IntPtr]::Zero
-
-            # POLICY_CREATE_ACCOUNT | POLICY_LOOKUP_NAMES = 0x00000010 | 0x00000800
-            $Status = [LsaApi]::LsaOpenPolicy([ref]$EmptyName, [ref]$objAttr, 0x00000810, [ref]$PolicyHandle)
-
-            If ($Status -ne 0) {
-
-                $WinErr = [LsaApi]::LsaNtStatusToWinError($Status)
-                Stop-Transcript
-                Throw "LsaOpenPolicy failed. Win32 error: $WinErr"
-
-            }
+            # Marshal the SID to unmanaged memory
+            $SidBytes = New-Object byte[] $Sid.BinaryLength
+            $Sid.GetBinaryForm($SidBytes, 0)
+            $SidPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($SidBytes.Length)
+            [System.Runtime.InteropServices.Marshal]::Copy($SidBytes, 0, $SidPtr, $SidBytes.Length)
 
             Try {
 
-                $Right = New-Object LsaApi+LSA_UNICODE_STRING
-                $Right.Buffer = 'SeServiceLogonRight'
-                $Right.Length = [uint16]($Right.Buffer.Length * 2)
-                $Right.MaximumLength = [uint16]($Right.Buffer.Length * 2 + 2)
+                $objAttr = New-Object LsaApi+LSA_OBJECT_ATTRIBUTES
+                $objAttr.Length = [System.Runtime.InteropServices.Marshal]::SizeOf($objAttr)
+                $EmptyName = New-Object LsaApi+LSA_UNICODE_STRING
+                $PolicyHandle = [IntPtr]::Zero
 
-                $Status = [LsaApi]::LsaAddAccountRights($PolicyHandle, $SidPtr, @($Right), 1)
+                # POLICY_CREATE_ACCOUNT | POLICY_LOOKUP_NAMES = 0x00000010 | 0x00000800
+                $Status = [LsaApi]::LsaOpenPolicy([ref]$EmptyName, [ref]$objAttr, 0x00000810, [ref]$PolicyHandle)
 
                 If ($Status -ne 0) {
 
                     $WinErr = [LsaApi]::LsaNtStatusToWinError($Status)
-                    Stop-Transcript
-                    Throw "LsaAddAccountRights failed. Win32 error: $WinErr"
+                    Throw "LsaOpenPolicy failed. Win32 error: $WinErr"
 
                 }
 
-                Write-Verbose "Successfully granted 'Log on as a service' to '$ServiceAccount' (SID: $($Sid.Value))."
+                Try {
+
+                    $Right = New-Object LsaApi+LSA_UNICODE_STRING
+                    $Right.Buffer = 'SeServiceLogonRight'
+                    $Right.Length = [uint16]($Right.Buffer.Length * 2)
+                    $Right.MaximumLength = [uint16]($Right.Buffer.Length * 2 + 2)
+
+                    $Status = [LsaApi]::LsaAddAccountRights($PolicyHandle, $SidPtr, @($Right), 1)
+
+                    If ($Status -ne 0) {
+
+                        $WinErr = [LsaApi]::LsaNtStatusToWinError($Status)
+                        Throw "LsaAddAccountRights failed. Win32 error: $WinErr"
+
+                    }
+
+                    Write-Verbose "Successfully granted 'Log on as a service' to '$ServiceAccount' (SID: $($Sid.Value))."
+
+                }
+
+                Finally {
+
+                    [void]([LsaApi]::LsaClose($PolicyHandle))
+
+                }
 
             }
 
             Finally {
 
-                [void]([LsaApi]::LsaClose($PolicyHandle))
+                [System.Runtime.InteropServices.Marshal]::FreeHGlobal($SidPtr)
 
             }
 
         }
 
-        Finally {
-
-            [System.Runtime.InteropServices.Marshal]::FreeHGlobal($SidPtr)
-
-        }
+        Grant-LogOnAsService -Sid $ServiceAccountSid
 
     }
 
-    Grant-LogOnAsService -ServiceAccount $ServiceAccount
-
-}
-
-# Install NDES role and supporting features
-Try {
-
-    Write-Verbose 'Installing NDES role and supporting features...'
-    $Install = Install-WindowsFeature -Name @('ADCS-Device-Enrollment', 'Web-Filtering', 'Web-ASP-Net', 'Web-ASP-Net45', 'Web-WMI', 'NET-HTTP-Activation', 'NET-WCF-HTTP-Activation45', 'RSAT-AD-PowerShell') -IncludeManagementTools -ErrorAction Stop
-
-}
-
-Catch {
-
-    Write-Warning $_.Exception.Message
-    Write-Warning 'An error occurred while installing the NDES role and supporting features. Correct the issue and run the script again.'
-    Stop-Transcript
-    Return
-
-}
-
-# Check if the installation was successful (catches silent failures not thrown as exceptions)
-If (-not $Install.Success) {
-
-    Write-Warning 'NDES role or supporting features installation failed. Review the transcript, correct the issue, and run the script again.'
-    Stop-Transcript
-    Return
-
-}
-
-# Check if the installation requires a restart
-If ($Install.RestartNeeded -ne 'No') {
-
-    Write-Warning 'A restart is required to complete the NDES role installation. Restart the server and run the script again.'
-    Stop-Transcript
-    Return
-
-}
-
-# Backup IIS configuration
-Write-Verbose 'Backing up IIS configuration...'
-$BackupName = "NDES_Install_$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
-[void](& "$env:SystemRoot\System32\inetsrv\appcmd.exe" add backup $BackupName 2>&1)
-
-If ($LASTEXITCODE -ne 0) {
-
-    Write-Warning "IIS configuration backup failed (exit code $LASTEXITCODE). Proceeding, but a pre-change backup may not exist."
-
-}
-
-Else {
-
-    Write-Verbose "IIS configuration backup '$BackupName' created."
-
-}
-
-# Install gMSA on local computer and verify functionality (requires RSAT-AD-PowerShell, installed above)
-If ($GroupManagedServiceAccount) {
-
-    # Extract the gMSA SAM account name (strip domain prefix)
-    $AccountName = ($ServiceAccount -split '\\')[1]
-
-    # Install the gMSA on the local computer to enable managed password retrieval
-    Write-Verbose "Installing gMSA $ServiceAccount on local computer..."
+    # Install NDES role and supporting features
     Try {
 
-        Install-ADServiceAccount -Identity $AccountName -ErrorAction Stop
-        Write-Verbose "gMSA $ServiceAccount successfully installed on local computer."
+        Write-Verbose 'Installing NDES role and supporting features...'
+        $Install = Install-WindowsFeature -Name @('ADCS-Device-Enrollment', 'Web-Filtering', 'Web-ASP-Net', 'Web-ASP-Net45', 'Web-WMI', 'NET-HTTP-Activation', 'NET-WCF-HTTP-Activation45', 'RSAT-AD-PowerShell') -IncludeManagementTools -ErrorAction Stop
 
     }
 
     Catch {
 
-        Stop-Transcript
-        Throw "Failed to install gMSA '$ServiceAccount' on local computer. Verify the account exists and this computer is authorized to retrieve its managed password. Error: $_"
+        Write-Warning $_.Exception.Message
+        Write-Warning 'An error occurred while installing the NDES role and supporting features. Correct the issue and run the script again.'
+        Return
 
     }
 
-    # Test gMSA functionality
-    Write-Verbose "Testing gMSA $ServiceAccount functionality..."
-    $ServiceAccountTest = Test-ADServiceAccount -Identity $AccountName
+    # Check if the installation was successful (catches silent failures not thrown as exceptions)
+    If (-not $Install.Success) {
 
-    If ($ServiceAccountTest) {
-
-        Write-Verbose "gMSA $ServiceAccount is correctly configured and functional."
+        Write-Warning 'NDES role or supporting features installation failed. Review the transcript, correct the issue, and run the script again.'
+        Return
 
     }
 
-    Else {
+    # Check if the installation requires a restart
+    If ($Install.RestartNeeded -ne 'No') {
 
-        Write-Warning "gMSA $ServiceAccount is not correctly configured. Verify this computer is a member of the gMSA's PrincipalsAllowedToRetrieveManagedPassword group and that the KDS Root Key has been created."
-
-    }
-
-}
-
-# Check local IIS_IUSRS group for NDES service account
-$IISUsers = Get-LocalGroupMember -Group IIS_IUSRS -Member $ServiceAccount -ErrorAction SilentlyContinue
-
-# Add NDES service account to local IIS_IUSRS group if required
-If ($Null -eq $IISUsers) {
-
-    Write-Verbose "Adding NDES service account $ServiceAccount to local IIS_IUSRS group..."
-    Add-LocalGroupMember -Group IIS_IUSRS -Member $ServiceAccount
-
-}
-
-Else {
-
-    Write-Verbose "NDES service account $ServiceAccount is already a member of the local IIS_IUSRS group."
-
-}
-
-# Configure NDES
-Write-Verbose 'Configuring NDES...'
-If ($GroupManagedServiceAccount) {
-
-    # Define configuration parameters when using a Group Managed Service Account (gMSA)
-    $Params = @{
-
-        ApplicationPoolIdentity = $True
-        RaName                  = $RaName
-        SigningProviderName     = 'Microsoft Strong Cryptographic Provider'
-        SigningKeyLength        = 2048
-        EncryptionProviderName  = 'Microsoft Strong Cryptographic Provider'
-        EncryptionKeyLength     = 2048
-        CaConfig                = $CaConfig
-        Force                   = $True
-        ErrorAction             = 'Stop'
+        Write-Warning 'A restart is required to complete the NDES role installation. Restart the server and run the script again.'
+        Return
 
     }
 
-}
-
-Else {
-
-    # Define configuration parameters when using a standard domain service account
-    $Params = @{
-
-        ServiceAccountName     = $ServiceAccount
-        ServiceAccountPassword = $Password
-        RaName                 = $RaName
-        SigningProviderName    = 'Microsoft Strong Cryptographic Provider'
-        SigningKeyLength       = 2048
-        EncryptionProviderName = 'Microsoft Strong Cryptographic Provider'
-        EncryptionKeyLength    = 2048
-        CaConfig               = $CaConfig
-        Force                  = $True
-        ErrorAction            = 'Stop'
-
-    }
-
-}
-
-Try {
-
-    # Install NDES
-    [void](Install-AdcsNetworkDeviceEnrollmentService @Params)
-
-}
-
-Catch {
-
-    # If an error occurs, display a warning, stop the transcript, and exit the script
-    Write-Warning -Message $_.Exception.Message
-    Write-Warning 'An error occurred while installing the NDES role. Remove the configuration using the following PowerShell command and run the script again: Uninstall-AdcsNetworkDeviceEnrollmentService -Force'
-
-    If ($_.Exception.HResult -eq -2147024893) {
-
-        Write-Warning "IMPORTANT: The IIS configuration file may be corrupt. Be sure to run the following command before running the script again: & $env:SystemDrive\Windows\System32\inetsrv\appcmd.exe restore backup $BackupName."
-
-    }
-    Stop-Transcript
-    Return
-
-}
-
-# Set service principal name (SPN). Only required when using a custom FQDN for the NDES service
-If ($Fqdn) {
-
-    Write-Verbose "Setting service principal name (SPN) for $Fqdn..."
-    [void](& setspn.exe -s http/$Fqdn $ServiceAccount)
-    [void](& setspn.exe -s http/$($Fqdn -Replace '(\w+)\..+', '$1') $ServiceAccount)
-
-}
-
-# Disable IE enhanced security. This is required to install the Intune Certificate Connector
-Write-Verbose 'Disabling IE enhanced security...'
-Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Type DWORD -Value '0'
-Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Type DWORD -Value '0'
-
-# Define NDES certificate templates
-Write-Verbose 'Defining NDES certificate template...'
-Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\ -Name  EncryptionTemplate -Value $EnrollmentTemplate -Force
-Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\ -Name  GeneralPurposeTemplate -Value $EnrollmentTemplate -Force
-Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\ -Name  SignatureTemplate -Value $EnrollmentTemplate -Force
-
-# Enable NDES long URL support
-Write-Verbose 'Enabling IIS long URL support...'
-[void](New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\HTTP\Parameters\' -Name MaxFieldLength -Type DWORD -Value 65534 -Force)
-[void](New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\HTTP\Parameters\' -Name MaxRequestBytes -Type DWORD -Value 65534 -Force)
-
-# Update NDES max URL length and max query string values in IIS request filtering
-Write-Verbose 'Setting URL length and max query string values...'
-Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/security/requestFiltering/requestLimits' -Name 'maxUrl' -Value 65534
-Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/security/requestFiltering/requestLimits' -Name 'maxQueryString' -Value 65534
-
-# Remove http site binding
-Write-Verbose 'Removing HTTP site binding in IIS...'
-[void](Remove-WebBinding -BindingInformation '*:80:' -Protocol 'http' -Confirm:$false)
-
-# Disable IIS default document
-Write-Verbose 'Disabling IIS default document...'
-[void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/defaultDocument' -Name 'Enabled' -Value 'False')
-
-# Remove default IIS files
-Write-Verbose 'Removing default IIS files...'
-[void](Remove-Item -Path $env:systemdrive\Inetpub\wwwroot\iisstart.*)
-
-# Remove NDES administration page IIS application
-Write-Verbose 'Removing NDES administration page IIS application...'
-Remove-WebApplication -Site 'Default Web Site' -Name 'CertSrv/mscep_admin' -Confirm:$false
-
-# Check for existing certificate binding in IIS
-If ((Get-WebBinding -Name 'Default Web Site' -Port 443 -Protocol 'HTTPS').Count -gt 0) {
-
-    # Remove existing web binding
-    Write-Verbose 'Removing existing HTTPS binding...'
-    [void](Remove-WebBinding -Name 'Default Web Site' -Port 443 -Protocol 'HTTPS' -Confirm:$false)
-
-}
-
-# Configure TLS certificate binding in IIS
-[void](New-WebBinding -Name 'Default Web Site' -Ipaddress '*' -Port 443 -Protocol 'HTTPS' -SslFlags 0)
-(Get-WebBinding -Name 'Default Web Site').AddSslCertificate($Thumbprint, 'My')
-
-# Configure IIS SCEP application pool to use a Group Managed Service Account (gMSA)
-If ($GroupManagedServiceAccount) {
-
-    Write-Verbose 'Configuring IIS SCEP application pool to use a Group Managed Service Account (gMSA)...'
-    [void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.applicationHost/applicationPools/add[@name="SCEP"]/processModel' -Name 'identityType' -Value 'SpecificUser')
-    [void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.applicationHost/applicationPools/add[@name="SCEP"]/processModel' -Name 'userName' -Value $ServiceAccount)
-
-}
-
-# Restart IIS
-Write-Verbose 'Restarting IIS...'
-[void](Restart-Service -Name W3SVC -Force)
-
-# Configure the SHA256 hash algorithm for certificate requests
-[void](New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\HashAlgorithm\' -Force)
-[void](New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\HashAlgorithm\' -PropertyType String -Name HashAlgorithm -Value SHA256 -Force)
-
-If ($AutoEnrollment) {
-
-    # Enable verbose logging for certificate enrollment events
-    Write-Verbose 'Enabling verbose logging for certificate enrollment events...'
-    [void](Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\AutoEnrollment\ -Name AEEventLogLevel -Value 0)
-
-    # Create scheduled task to restart the SCEP IIS application pool on certificate renewal events
-    Write-Verbose 'Creating scheduled task to restart SCEP IIS application pool on certificate renewal events...'
-    $User = 'NT AUTHORITY\SYSTEM'
-    $Action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NonInteractive -NoLogo -NoProfile Restart-WebAppPool -Name SCEP'
-    $CIMTriggerClass = Get-CimClass -ClassName MSFT_TaskEventTrigger -Namespace Root/Microsoft/Windows/TaskScheduler:MSFT_TaskEventTrigger
-    $Trigger = New-CimInstance -CimClass $CIMTriggerClass -ClientOnly
-    $Trigger.Subscription =
-    @'
-<QueryList><Query Id="0" Path="System"><Select Path="Application">*[System[Provider[@Name='Microsoft-Windows-CertificateServicesClient-CertEnroll'] and EventID=20]]</Select></Query></QueryList>
-'@
-    $Trigger.Enabled = $True
-
-    # Register scheduled task
-    Write-Verbose 'Registering scheduled task...'
-    [void](Register-ScheduledTask -TaskName 'Restart SCEP IIS Application Pool on Certificate Enrollment' -User $User -Action $Action -Trigger $Trigger -RunLevel Highest -Force)
-
-}
-
-# Remove legacy CEP Encryption and Exchange Enrollment Agent (Offline request) certificates
-If ($RemoveLegacyCertificates) {
-
-    Write-Verbose 'Removing legacy certificates...'
-    $LegacyCertificates = Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object { $_.Subject -match $RaName }
-    ForEach ($LegacyCertificate in $LegacyCertificates) {
-
-        Write-Verbose "Removing legacy certificate $($LegacyCertificate.Thumbprint)..."
-        Remove-Item -Path Cert:\LocalMachine\My\$($LegacyCertificate.Thumbprint) -Force
-
-    }
-
-    Write-Warning 'Legacy certificates have been removed. Ensure the server has enrolled for new certificates.'
-
-}
-
-# Unpublish default NDES certificate templates
-If ($RemoveDefaultTemplates) {
-
-    Write-Verbose 'Unpublishing default NDES certificate templates from the CA...'
-    $Result = & certutil.exe -config "$CaConfig" -setcatemplates '-CEPEncryption,EnrollmentAgentOffline,IPSECIntermediateOffline' 2>&1
+    # Backup IIS configuration
+    Write-Verbose 'Backing up IIS configuration...'
+    $BackupName = "NDES_Install_$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
+    [void](& "$env:SystemRoot\System32\inetsrv\appcmd.exe" add backup $BackupName 2>&1)
 
     If ($LASTEXITCODE -ne 0) {
 
-        Write-Warning "Failed to remove default NDES certificate templates. Verify the NDES service account has CA administrator permissions or remove them manually. Error: $Result"
+        Write-Warning "IIS configuration backup failed (exit code $LASTEXITCODE). Proceeding, but a pre-change backup may not exist."
 
     }
 
     Else {
 
-        Write-Verbose 'Default NDES certificate templates (CEPEncryption, EnrollmentAgentOffline, IPSECIntermediateOffline) successfully unpublished from the CA.'
+        Write-Verbose "IIS configuration backup '$BackupName' created."
 
     }
 
+    # Install gMSA on local computer and verify functionality (requires RSAT-AD-PowerShell, installed above)
+    If ($GroupManagedServiceAccount) {
+
+        # Extract the gMSA SAM account name (strip domain prefix)
+        $AccountName = ($ServiceAccount -split '\\')[1]
+
+        # Install the gMSA on the local computer to enable managed password retrieval
+        Write-Verbose "Installing gMSA $ServiceAccount on local computer..."
+        Try {
+
+            Install-ADServiceAccount -Identity $AccountName -ErrorAction Stop
+            Write-Verbose "gMSA $ServiceAccount successfully installed on local computer."
+
+        }
+
+        Catch {
+
+            Throw "Failed to install gMSA '$ServiceAccount' on local computer. Verify the account exists and this computer is authorized to retrieve its managed password. Error: $_"
+
+        }
+
+        # Test gMSA functionality
+        Write-Verbose "Testing gMSA $ServiceAccount functionality..."
+        $ServiceAccountTest = Test-ADServiceAccount -Identity $AccountName
+
+        If ($ServiceAccountTest) {
+
+            Write-Verbose "gMSA $ServiceAccount is correctly configured and functional."
+
+        }
+
+        Else {
+
+            Write-Warning "gMSA $ServiceAccount is not correctly configured. Verify this computer is a member of the gMSA's PrincipalsAllowedToRetrieveManagedPassword group and that the KDS Root Key has been created."
+
+        }
+
+    }
+
+    # Add NDES service account to local IIS_IUSRS group if required. Adding unconditionally and handling the
+    # 'member exists' error avoids Get-LocalGroupMember, which fails if the group contains orphaned SIDs
+    Write-Verbose "Adding NDES service account $ServiceAccount to local IIS_IUSRS group..."
+    Try {
+
+        Add-LocalGroupMember -Group IIS_IUSRS -Member $ServiceAccount -ErrorAction Stop
+
+    }
+
+    Catch {
+
+        If ($_.FullyQualifiedErrorId -like 'MemberExists,*') {
+
+            Write-Verbose "NDES service account $ServiceAccount is already a member of the local IIS_IUSRS group."
+
+        }
+
+        Else {
+
+            Throw
+
+        }
+
+    }
+
+    # Configure NDES
+    Write-Verbose 'Configuring NDES...'
+    If ($GroupManagedServiceAccount) {
+
+        # Define configuration parameters when using a Group Managed Service Account (gMSA)
+        $Params = @{
+
+            ApplicationPoolIdentity = $True
+            RaName                  = $RaName
+            SigningProviderName     = 'Microsoft Strong Cryptographic Provider'
+            SigningKeyLength        = 2048
+            EncryptionProviderName  = 'Microsoft Strong Cryptographic Provider'
+            EncryptionKeyLength     = 2048
+            CaConfig                = $CaConfig
+            Force                   = $True
+            ErrorAction             = 'Stop'
+
+        }
+
+    }
+
+    Else {
+
+        # Define configuration parameters when using a standard domain service account
+        $Params = @{
+
+            ServiceAccountName     = $ServiceAccount
+            ServiceAccountPassword = $Password
+            RaName                 = $RaName
+            SigningProviderName    = 'Microsoft Strong Cryptographic Provider'
+            SigningKeyLength       = 2048
+            EncryptionProviderName = 'Microsoft Strong Cryptographic Provider'
+            EncryptionKeyLength    = 2048
+            CaConfig               = $CaConfig
+            Force                  = $True
+            ErrorAction            = 'Stop'
+
+        }
+
+    }
+
+    Try {
+
+        # Install NDES
+        [void](Install-AdcsNetworkDeviceEnrollmentService @Params)
+
+    }
+
+    Catch {
+
+        # If an error occurs, display a warning and exit the script
+        Write-Warning -Message $_.Exception.Message
+        Write-Warning 'An error occurred while installing the NDES role. Remove the configuration using the following PowerShell command and run the script again: Uninstall-AdcsNetworkDeviceEnrollmentService -Force'
+
+        If ($_.Exception.HResult -eq -2147024893) {
+
+            Write-Warning "IMPORTANT: The IIS configuration file may be corrupt. Be sure to run the following command before running the script again: & $env:SystemDrive\Windows\System32\inetsrv\appcmd.exe restore backup $BackupName."
+
+        }
+
+        Return
+
+    }
+
+    # Set service principal names (SPNs) for the FQDN and short name. Only required when using a custom FQDN for the NDES service
+    If ($Fqdn) {
+
+        ForEach ($Spn in @("http/$Fqdn", "http/$($Fqdn -Replace '(\w+)\..+', '$1')")) {
+
+            Write-Verbose "Registering service principal name (SPN) $Spn for $ServiceAccount..."
+            $SpnResult = & setspn.exe -s $Spn $ServiceAccount 2>&1
+
+            If ($LASTEXITCODE -ne 0) {
+
+                Write-Warning "Failed to register SPN $Spn for $ServiceAccount. Resolve the issue or register the SPN manually. Error: $SpnResult"
+
+            }
+
+            Else {
+
+                Write-Verbose "SPN $Spn registered successfully."
+
+            }
+
+        }
+
+    }
+
+    # Disable IE enhanced security. This is required to install the Intune Certificate Connector
+    Write-Verbose 'Disabling IE enhanced security...'
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Type DWORD -Value '0'
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}' -Name 'IsInstalled' -Type DWORD -Value '0'
+
+    # Define NDES certificate templates using the same enrollment template for all three purposes (Encryption, GeneralPurpose, and Signature) for simplicity
+    # Note that it is possible (and sometimes preferable) to specify different templates for each purpose if more granular control is required
+    Write-Verbose 'Defining NDES certificate template...'
+    Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\ -Name  EncryptionTemplate -Value $EnrollmentTemplate -Force
+    Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\ -Name  GeneralPurposeTemplate -Value $EnrollmentTemplate -Force
+    Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\ -Name  SignatureTemplate -Value $EnrollmentTemplate -Force
+
+    # Enable NDES long URL support
+    Write-Verbose 'Enabling IIS long URL support...'
+    [void](New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\HTTP\Parameters\' -Name MaxFieldLength -Type DWORD -Value 65534 -Force)
+    [void](New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\HTTP\Parameters\' -Name MaxRequestBytes -Type DWORD -Value 65534 -Force)
+
+    # Update NDES max URL length and max query string values in IIS request filtering
+    Write-Verbose 'Setting URL length and max query string values...'
+    Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/security/requestFiltering/requestLimits' -Name 'maxUrl' -Value 65534
+    Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/security/requestFiltering/requestLimits' -Name 'maxQueryString' -Value 65534
+
+    # Remove HTTP site binding if present. The binding may already be removed if the script has run previously.
+    # Get-WebBinding parameter filtering is unreliable, so filter on the protocol property and pipe the results
+    # to Remove-WebBinding to ensure the removal targets exactly the bindings found
+    $HttpBindings = Get-WebBinding -Name 'Default Web Site' | Where-Object { $_.protocol -eq 'http' }
+
+    If ($HttpBindings) {
+
+        Write-Verbose 'Removing HTTP site binding in IIS...'
+        [void]($HttpBindings | Remove-WebBinding -Confirm:$false)
+
+    }
+
+    Else {
+
+        Write-Verbose 'HTTP site binding not found. Skipping removal.'
+
+    }
+
+    # Disable IIS default document
+    Write-Verbose 'Disabling IIS default document...'
+    [void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/defaultDocument' -Name 'Enabled' -Value 'False')
+
+    # Remove default IIS files
+    Write-Verbose 'Removing default IIS files...'
+    [void](Remove-Item -Path $env:systemdrive\Inetpub\wwwroot\iisstart.* -ErrorAction SilentlyContinue)
+
+    # Remove NDES administration page IIS application if present. The application may already be removed if the script has run previously
+    If (Get-WebApplication -Site 'Default Web Site' -Name 'CertSrv/mscep_admin') {
+
+        Write-Verbose 'Removing NDES administration page IIS application...'
+        Remove-WebApplication -Site 'Default Web Site' -Name 'CertSrv/mscep_admin' -Confirm:$false
+
+    }
+
+    Else {
+
+        Write-Verbose 'NDES administration page IIS application not found. Skipping removal.'
+
+    }
+
+    # Check for existing certificate binding in IIS. Filter on the protocol property and pipe the results
+    # to Remove-WebBinding for the same reasons noted for the HTTP binding removal above
+    $HttpsBindings = Get-WebBinding -Name 'Default Web Site' | Where-Object { $_.protocol -eq 'https' }
+
+    If ($HttpsBindings) {
+
+        # Remove existing web binding
+        Write-Verbose 'Removing existing HTTPS binding...'
+        [void]($HttpsBindings | Remove-WebBinding -Confirm:$false)
+
+    }
+
+    # Configure TLS certificate binding in IIS
+    [void](New-WebBinding -Name 'Default Web Site' -Ipaddress '*' -Port 443 -Protocol 'HTTPS' -SslFlags 0)
+    (Get-WebBinding -Name 'Default Web Site').AddSslCertificate($Thumbprint, 'My')
+
+    # Configure IIS SCEP application pool to use a Group Managed Service Account (gMSA)
+    If ($GroupManagedServiceAccount) {
+
+        Write-Verbose 'Configuring IIS SCEP application pool to use a Group Managed Service Account (gMSA)...'
+        [void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.applicationHost/applicationPools/add[@name="SCEP"]/processModel' -Name 'identityType' -Value 'SpecificUser')
+        [void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.applicationHost/applicationPools/add[@name="SCEP"]/processModel' -Name 'userName' -Value $ServiceAccount)
+
+    }
+
+    # Restart IIS
+    Write-Verbose 'Restarting IIS...'
+    [void](Restart-Service -Name W3SVC -Force)
+
+    # Configure the SHA256 hash algorithm for certificate requests
+    [void](New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\HashAlgorithm\' -Force)
+    [void](New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\HashAlgorithm\' -PropertyType String -Name HashAlgorithm -Value SHA256 -Force)
+
+    If ($AutoEnrollment) {
+
+        # Enable verbose logging for certificate enrollment events
+        Write-Verbose 'Enabling verbose logging for certificate enrollment events...'
+        [void](Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\AutoEnrollment\ -Name AEEventLogLevel -Value 0)
+
+        # Create scheduled task to restart the SCEP IIS application pool on certificate renewal events
+        Write-Verbose 'Creating scheduled task to restart SCEP IIS application pool on certificate renewal events...'
+        $User = 'NT AUTHORITY\SYSTEM'
+        $Action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NonInteractive -NoLogo -NoProfile Restart-WebAppPool -Name SCEP'
+        $CIMTriggerClass = Get-CimClass -ClassName MSFT_TaskEventTrigger -Namespace Root/Microsoft/Windows/TaskScheduler:MSFT_TaskEventTrigger
+        $Trigger = New-CimInstance -CimClass $CIMTriggerClass -ClientOnly
+        $Trigger.Subscription =
+        @'
+<QueryList><Query Id="0" Path="Application"><Select Path="Application">*[System[Provider[@Name='Microsoft-Windows-CertificateServicesClient-CertEnroll'] and EventID=20]]</Select></Query></QueryList>
+'@
+        $Trigger.Enabled = $True
+
+        # Register scheduled task
+        Write-Verbose 'Registering scheduled task...'
+        [void](Register-ScheduledTask -TaskName 'Restart SCEP IIS Application Pool on Certificate Enrollment' -User $User -Action $Action -Trigger $Trigger -RunLevel Highest -Force)
+
+    }
+
+    # Remove legacy CEP Encryption and Exchange Enrollment Agent (Offline request) certificates
+    If ($RemoveLegacyCertificates) {
+
+        Write-Verbose 'Removing legacy certificates...'
+        $LegacyCertificates = Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object { $_.Subject -match $RaName }
+        ForEach ($LegacyCertificate in $LegacyCertificates) {
+
+            Write-Verbose "Removing legacy certificate $($LegacyCertificate.Thumbprint)..."
+            Remove-Item -Path Cert:\LocalMachine\My\$($LegacyCertificate.Thumbprint) -Force
+
+        }
+
+        Write-Warning 'Legacy certificates have been removed. Ensure the server has enrolled for new certificates.'
+
+    }
+
+    # Unpublish default NDES certificate templates
+    If ($RemoveDefaultTemplates) {
+
+        Write-Verbose 'Unpublishing default NDES certificate templates from the CA...'
+        $Result = & certutil.exe -config "$CaConfig" -setcatemplates '-CEPEncryption,EnrollmentAgentOffline,IPSECIntermediateOffline' 2>&1
+
+        If ($LASTEXITCODE -ne 0) {
+
+            Write-Warning "Failed to remove default NDES certificate templates. Verify the NDES service account has CA administrator permissions or remove them manually. Error: $Result"
+
+        }
+
+        Else {
+
+            Write-Verbose 'Default NDES certificate templates (CEPEncryption, EnrollmentAgentOffline, IPSECIntermediateOffline) successfully unpublished from the CA.'
+
+        }
+
+    }
+
+    # Record that installation and configuration completed so post-transcript steps run only on success
+    $InstallComplete = $True
+
 }
 
-If ($Restart) {
-
-    # Stop the transcript and restart the server
-    Write-Verbose 'Stopping transcript...'
-    Stop-Transcript
-    Write-Verbose 'Restarting server...'
-    Restart-Computer -Force
-
-}
-
-Else {
+Finally {
 
     # Stop transcript
     Write-Verbose 'Stopping transcript...'
     Stop-Transcript
 
-    # Display post-installation instructions
-    Write-Warning 'A restart is required to complete the installation and configuration of the NDES role.'
+}
+
+# Restart the server or display post-installation instructions (skipped if the script exited early above)
+If ($InstallComplete) {
+
+    If ($Restart) {
+
+        Write-Verbose 'Restarting server...'
+        Restart-Computer -Force
+
+    }
+
+    Else {
+
+        Write-Warning 'A restart is required to complete the installation and configuration of the NDES role.'
+
+    }
 
 }
 
 # SIG # Begin signature block
 # MIIk7QYJKoZIhvcNAQcCoIIk3jCCJNoCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCFLqMJJktgck+D
-# x+wbKJ6dVSwMksSd/GW/tdEpLojw66CCH6YwggWNMIIEdaADAgECAhAOmxiO+dAt
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDXOlHF7ULXdIi6
+# B8zLqbEBEFw8g9zjvLfuflc9Q4QXZ6CCH6YwggWNMIIEdaADAgECAhAOmxiO+dAt
 # 5+/bUOIIQBhaMA0GCSqGSIb3DQEBDAUAMGUxCzAJBgNVBAYTAlVTMRUwEwYDVQQK
 # EwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xJDAiBgNV
 # BAMTG0RpZ2lDZXJ0IEFzc3VyZWQgSUQgUm9vdCBDQTAeFw0yMjA4MDEwMDAwMDBa
@@ -892,25 +1029,25 @@ Else {
 # IEc0IENvZGUgU2lnbmluZyBSU0E0MDk2IFNIQTM4NCAyMDIxIENBMQIQDsYrSCrm
 # UJuvTRscProh/zANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCB73R5y8nEJ979DZGeyiIUJ
-# H5cWiQrk+aADpAZGYEmULjALBgcqhkjOPQIBBQAESDBGAiEA3nggXScYtDf5L/XT
-# N91OIYhUyw92m3JTssdaoH41gFoCIQCseU5oml3hRzGf3TxWSRgILONLvuTGvY9W
-# UUGgqAr4G6GCAyYwggMiBgkqhkiG9w0BCQYxggMTMIIDDwIBATB9MGkxCzAJBgNV
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDgu5fZIrMVi7jZ7iMDXHKG
+# pp3ImSPTquxMy9YCpRRX/jALBgcqhkjOPQIBBQAESDBGAiEAgdfuCOvz8CYP3uLk
+# hGxaeiEzjzKJVn+xWSFbictVADICIQC9wFd84bAJ1rfPU4W3hXhQzkClvs/rDPkN
+# qSLtv5fAdKGCAyYwggMiBgkqhkiG9w0BCQYxggMTMIIDDwIBATB9MGkxCzAJBgNV
 # BAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5jLjFBMD8GA1UEAxM4RGlnaUNl
 # cnQgVHJ1c3RlZCBHNCBUaW1lU3RhbXBpbmcgUlNBNDA5NiBTSEEyNTYgMjAyNSBD
 # QTECEAqA7xhLjfEFgtHEdqeVdGgwDQYJYIZIAWUDBAIBBQCgaTAYBgkqhkiG9w0B
-# CQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjA1MjgwMzM5MDVaMC8G
-# CSqGSIb3DQEJBDEiBCBuFSq2Y10/0vmRzvu/4BHY0HaRSDHgsfXnoxF5iZkLZTAN
-# BgkqhkiG9w0BAQEFAASCAgB6S+1KACcWSSkqCEV7DQZh6Nd/ObbJZLsoQlKsXe+H
-# H+ORoJba11gIx6nkEtGqHU4W/Yz2oQpx0xpcBtVT+VWoFRdDR5uQgMkuIU7WM+BH
-# Xe5BbyFG6HWlvAwikI5Z0DDuKQnKj//LzCG/Wb39c6CUoQS+FGB5BKFKimOjpTJO
-# nTGwdg3eCphwI/PWs+LehSs6wiRFUSkXCH/FXPCtfqmVrjTHYcZX3ygHb7g/yUzp
-# AQ534N+LlWplXzsrgsaJ4YtMDCwYjr2ubyvk/4EX1RKW1upajk0jLnA6tvDERXCW
-# LJjfHW00o69utliVzpQImc+H50nLrFaRdW4ei3PNY84Np5ls4QLL5/0qqw6DtBkP
-# Omatod1WZg7pXO0DSTNw4Rj6d8MGF/gKyt6/33Zzc5xiV+ZSORnzbNSjpjX2T29u
-# a2BPFP+/B1HKzauMWZIs3bbYF6xldSKJEhfiQJQ2HDtlfltcalWiOM4gtmhlAJug
-# J2j1ZxV4k2mNaSd7b+XS2+YsLEsUNoEDf/A6Jw0HslPPjthReTToWK75DKEiSHjU
-# LQ+8+IqOp1+J1hYO3nrQVnJg/8IzQ1Zhf2y/UOJbBw+WDwuj0Sf+v+gdgK758xsq
-# JGfmtPushKuE8Felg+tta3SMoms84mWnV+vWa+XxZ98Mifby2RSJsypZcXGd07DA
-# 9g==
+# CQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEPFw0yNjA3MDMwNDE1MDNaMC8G
+# CSqGSIb3DQEJBDEiBCBG5GP3O3z3Np0KqXhLzD6MHS5TsxzNLuekLEMXTzdTFTAN
+# BgkqhkiG9w0BAQEFAASCAgAVvILv1w8mMjEai0NnBd00YS2OBjPN5gVxW8fu/OXv
+# kFYK6VZBehq5OBNeUPTRXCfW+YOpprRKjbIyNLmIHX0Ov1sP16kkDcQqTs8KnMYO
+# XgLmZfEl3jB4ueY9ONli52q1/zKg3WJeXx4eeiihYJIshZGgomOp/XPkeZM9upEy
+# 8df4OoLaZaWCEZXiYrCrBg5NAGh0xpVwa6UyoOw0Jlc90NsX6syKw2ssyDexvcqC
+# /ksEmclCe6U9/GxrjzB9kah2FZQCQMuUfpfD1kOgPPGFG057ClTS0/++rji8QWOB
+# ON5MFXuZASowZI7m5KsE17cm1Ob6LbD6uV9BbP9Gs6RSRvhZguNibNuwKODZVxQu
+# A+OdrOEwNohDEt3pP1VaIdeMs+6MIJ3BVaadaNazqSyBMQEGwVLgG3c2/yZIAC1d
+# fEqXEcPxgOqbQHCoB9CanVH1E0jcIAUtHtAdQo69+Z3krgzbAeSksaeUnoJdowb6
+# /tPM9qzYAM9gKJqPF6EL/Uf5CwHRvwgq5WMKhoSjVihWHA6n8TWmCcAxeb9PMu1C
+# 2J23UaH0hKz/0E34JHBv5sd9rjHKEX5w9q146RCnDHVy8tOn2mh+rSeOk/rcQ0fv
+# MMkns0vjDGFExKq9kwWH3Cm3p/u2znJejlnxLeBTquM51Ze8n1xi907YdP4qNovv
+# cw==
 # SIG # End signature block
