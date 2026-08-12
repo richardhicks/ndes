@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 4.0
+.VERSION 4.1
 
 .GUID a52391cf-9c38-4304-8c9b-89f151461f3c
 
@@ -97,9 +97,9 @@
     https://www.richardhicks.com/
 
 .NOTES
-    Version:        4.0
+    Version:        4.1
     Creation Date:  November 29, 2023
-    Last Updated:   August 11, 2026
+    Last Updated:   August 12, 2026
     Author:         Richard Hicks
     Organization:   Richard M. Hicks Consulting, Inc.
     Contact:        rich@richardhicks.com
@@ -928,6 +928,10 @@ public class LsaApi
         Write-Verbose 'Enabling verbose logging for certificate enrollment events...'
         [void](Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Cryptography\AutoEnrollment\ -Name AEEventLogLevel -Value 0)
 
+        # Disable overlapped recycling so the old worker process releases the RA certificates before the new one starts
+        Write-Verbose 'Disabling overlapped recycling for the SCEP application pool...'
+        [void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.applicationHost/applicationPools/add[@name="SCEP"]/recycling' -Name 'disallowOverlappingRotation' -Value $True)
+
         # Create scheduled task to restart the SCEP IIS application pool on certificate renewal events
         Write-Verbose 'Creating scheduled task to restart SCEP IIS application pool on certificate renewal events...'
         $User = 'NT AUTHORITY\SYSTEM'
@@ -1012,11 +1016,12 @@ If ($InstallComplete) {
     }
 
 }
+
 # SIG # Begin signature block
 # MIIk6wYJKoZIhvcNAQcCoIIk3DCCJNgCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAanBgg1HyDbHs7
-# qx2RqEFvrkf0nc6Oqi8pCbkA9a2qdKCCH6YwggWNMIIEdaADAgECAhAOmxiO+dAt
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCXQBpC4scn671t
+# 59d91Ci/SzKhoyfW//7j5toYXvAc0KCCH6YwggWNMIIEdaADAgECAhAOmxiO+dAt
 # 5+/bUOIIQBhaMA0GCSqGSIb3DQEBDAUAMGUxCzAJBgNVBAYTAlVTMRUwEwYDVQQK
 # EwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xJDAiBgNV
 # BAMTG0RpZ2lDZXJ0IEFzc3VyZWQgSUQgUm9vdCBDQTAeFw0yMjA4MDEwMDAwMDBa
@@ -1190,24 +1195,24 @@ If ($InstallComplete) {
 # IEc0IENvZGUgU2lnbmluZyBSU0E0MDk2IFNIQTM4NCAyMDIxIENBMQIQDsYrSCrm
 # UJuvTRscProh/zANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDdYxd8onl0PfYxJH9km0NU
-# FHK6RkBRrishqOhARIGTTzALBgcqhkjOPQIBBQAERjBEAiB5aO6jn7nQCSyHourg
-# VEigcgbhf/GsnOZy2fnT3sP6QAIgUiC2/zcujaZAtfUGM5lzV0xiHLftFzL0LJl1
-# VWnOnmuhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCCAw8CAQEwfTBpMQswCQYDVQQG
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDwbORoqNqH9Qk76MhjAd8G
+# Yx8cIYSpnFpKuwieEbRD1DALBgcqhkjOPQIBBQAERjBEAiA9Uah6NuU66xFao5hS
+# DWqUHHLgdW8KYCqoVs2hl4ecrgIgR4XbZ5VglFguH7w0RhdfLW/UytFUO2Vx3dRt
+# yLTKhe6hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCCAw8CAQEwfTBpMQswCQYDVQQG
 # EwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4xQTA/BgNVBAMTOERpZ2lDZXJ0
 # IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQwOTYgU0hBMjU2IDIwMjUgQ0Ex
 # AhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQCAQUAoGkwGAYJKoZIhvcNAQkD
-# MQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcNMjYwODExMTg0NTI0WjAvBgkq
-# hkiG9w0BCQQxIgQgDxI06DbYhI+v7mOyz2+JAWOh64/l2z7ftNJDw5f4ZocwDQYJ
-# KoZIhvcNAQEBBQAEggIAWj84U+41WJRKO09yKwRcUXUmpgBenJO8ZadCAhl1Y2VS
-# kKbWa1P4L93b+5IFYZUgyTcjvnMfTzeIv9RYfvRwwJjAEzbOoUX4uayaiAitjZmo
-# L6B0mb14W10LtWaM2yZd8T3T+LvqjvUO21k6dNiqT8ypYisA12yoTMplvWQZNFMO
-# JyejRQTWwSi3bYkejvk8uW6Om1Ih8CvLCIS+mOjuA1S+cXRHC9/Xc2SutUuWBT5s
-# QY/yAfosIdjvZbx+WMWM+K/9LemEDDuX74O3rqi0D+i5dA5biFZNa8ta+Uf+I0Bp
-# BB5bWB0eZQaxAD4RNIxYz5ais0x0VscFw8YTxGNVuVxLsMmyypER5w0NJYGpjCH8
-# buXpuQsfC4p66yT3CE6YYPxKLBnV5fJ0l9HcJkLUkmSqpIPU6/iEahjC11FmRh8M
-# 1K79rLpAnUAYwDm09/LjqimjVoUyILLKoOhTddENC2hJGgZt6Q5VAO9rwZy1VHGr
-# g1qHFygP32BgDETV/kH+0V078GTO9kz3VFnY008CMwBSuO4dLHdegWqcUDautx1h
-# HQ4PAKE7yZpL4YX7jqRy9H4n2hWWBIhRZE7sdEUCCHcFG8RI4RmXQ6BtwCeL9HY4
-# fi01aYf13yhrG4fRtH3Rp13o87lPSrgLBmz61YCUlqm/SBGVsH6N9pxNSZVRPUc=
+# MQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcNMjYwODEyMTgxMjEzWjAvBgkq
+# hkiG9w0BCQQxIgQgaKvqzPd7vx60RF7W+OtqDc2ekGKkQPZ23rz50wDX+GowDQYJ
+# KoZIhvcNAQEBBQAEggIAu5MDwxyPGSmFn8lAgXYX0dlR5xOGkUy0SGMlCVt9v8ic
+# GZw86i2GK24W74eZi0kL08pzbSLuiVsoYlFuQSfpoGYIbM8emhe2XMzQ5iiloAc2
+# bQ5zQD63jIhWMQ0jGsMvpByGeAyW0PzZoHFSYvU5rrQDFh3/sRiyZU8OkgKnpHnu
+# KcdRpNpkZTz0u2dGT9sn+fIjWD5oPoT1F2Tfxo9dD/nnqHnUmqRXO4sLCc7UDlMN
+# JhvjxOuhmxRvKGUHppnbCU03llTDpSEko9CdLZilZQGLLeWV7FFvJqx4pwiWSMIc
+# H8DNzU9o3LYsLm7QdsQXDZ6eKdXqxULLZvPzmmPCkv1k60Q4fgaKLP47O55AoZgc
+# U4L29Y81sIE2b7NPunVOEH6ySZ0gWqd11OZPh3bGiqiQTkWXlfjjUbOiWI1rPATc
+# 8RlHwvDX2t/Zf6nxcQ6HUwLzlb0d92233wwmDnw4GmCdQRqbRUfmeZAoy/cZNTTV
+# xnpOYBzSpQxx3uWIm2WDLOEKXcoToyHY8lc4mc0Dty6hPbGPMXW3cfZJwwZg9FvS
+# N3LAY/FUinFkTmOKWyu/d9eqYL4VuC7h2ZYX6lYzZLcAVqwOv4HKAf4o1LuUa7j5
+# O3LKzcdRHv001TaKLETssZxLFnf81oxmIO3xadF1uGSEA4vkLzWWpiTFpGzm+7g=
 # SIG # End signature block
