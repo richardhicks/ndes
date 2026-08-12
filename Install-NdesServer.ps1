@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 4.1
+.VERSION 4.2
 
 .GUID a52391cf-9c38-4304-8c9b-89f151461f3c
 
@@ -41,7 +41,7 @@
     The service account to use for the NDES service. Use the format domain\username. If using a Group Managed Service Account (gMSA), use the format domain\username$ and include the GroupManagedServiceAccount parameter. For standard domain service accounts, the script prompts for the account password and validates it against the domain.
 
 .PARAMETER GroupManagedServiceAccount
-    This parameter is optional. If specified, the NDES service will be configured to use a Group Managed Service Account (gMSA) for the SCEP IIS application pool. In addition, permissions on the HKLM\SOFTWARE\Microsoft\Cryptography\MSCEP registry key are restricted to SYSTEM, Administrators, and the gMSA, and auditing of configuration changes is enabled (Security log events require the 'Audit Registry' subcategory to be enabled via Group Policy). If the Microsoft Intune Certificate Connector service runs as a custom account instead of SYSTEM, grant that account read access to this registry key manually. Note that reverting the SCEP application pool to its default identity after installation will cause NDES to fail until permissions are restored. If RemoveLegacyCertificates is not specified, the gMSA is also granted read access to the RA certificate private keys. If RemoveLegacyCertificates is specified, ensure replacement RA certificates are enrolled from certificate templates that grant the gMSA read access to the private key.
+    This parameter is optional. If specified, the NDES service will be configured to use a Group Managed Service Account (gMSA) for the SCEP IIS application pool. If RemoveLegacyCertificates is not specified, the gMSA is also granted read access to the RA certificate private keys. If RemoveLegacyCertificates is specified, ensure replacement RA certificates are enrolled from certificate templates that grant the gMSA read access to the private key.
 
 .PARAMETER Fqdn
     This parameter is optional. It is the custom fully qualified domain name (FQDN) for the NDES service when configured behind a load balancer.
@@ -88,6 +88,8 @@
 
     In addition, this script performs several post-installation tasks to ensure the NDES service is properly configured, optimized, and secured.
 
+    As part of post-installation hardening, permissions on the HKLM\SOFTWARE\Microsoft\Cryptography\MSCEP registry key are restricted to SYSTEM, Administrators, and the NDES service account, and auditing of configuration changes to this key is enabled (Security log events require the 'Audit Registry' subcategory to be enabled via Group Policy). If the Microsoft Intune Certificate Connector service runs as a custom account instead of SYSTEM, grant that account read access to this registry key manually. Note that changing the SCEP application pool identity after installation will cause NDES to fail until the registry key permissions are updated.
+
     IMPORTANT NOTE: This script is for configuring NDES to support the Microsoft Intune Certificate Connector. Settings configured by this script will not work with other deployment scenarios.
 
 .LINK
@@ -97,7 +99,7 @@
     https://www.richardhicks.com/
 
 .NOTES
-    Version:        4.1
+    Version:        4.2
     Creation Date:  November 29, 2023
     Last Updated:   August 12, 2026
     Author:         Richard Hicks
@@ -750,107 +752,114 @@ public class LsaApi
         [void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.applicationHost/applicationPools/add[@name="SCEP"]/processModel' -Name 'identityType' -Value 'SpecificUser')
         [void](Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.applicationHost/applicationPools/add[@name="SCEP"]/processModel' -Name 'userName' -Value $ServiceAccount)
 
-        # The initial NDES configuration granted the SCEP application pool virtual account (IIS AppPool\SCEP)
-        # permissions on the MSCEP registry key. The application pool now runs as the gMSA, so mirror those
-        # permissions to the gMSA, remove the legacy application pool entries, and restrict the key to
-        # SYSTEM, Administrators, and the gMSA only
-        Write-Verbose "Restricting MSCEP registry key permissions to $ServiceAccount..."
-        $MscepRegistryKey = 'HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP'
+    }
 
-        # Read the DACL and SACL together so both are updated in a single operation
-        $Acl = Get-Acl -Path $MscepRegistryKey -Audit
+    # Restrict permissions on the MSCEP registry key to SYSTEM, Administrators, and the NDES service
+    # account. For gMSA deployments, the initial NDES configuration granted the SCEP application pool
+    # virtual account (IIS AppPool\SCEP) permissions on this key and the application pool now runs as
+    # the gMSA, so those permissions are mirrored to the gMSA and the legacy application pool entries
+    # removed. For standard domain service account deployments, the application pool already runs as
+    # the service account
+    Write-Verbose "Restricting MSCEP registry key permissions to $ServiceAccount..."
+    $MscepRegistryKey = 'HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP'
 
-        # Disable inheritance and discard inherited entries when the ACL is written. PurgeAccessRules
-        # cannot remove inherited entries (preserved copies are only created when the ACL is written),
-        # so preserving inherited entries would leave the broad-read grants in place. Explicit entries
-        # for SYSTEM and Administrators are added below to replace their inherited grants
-        $Acl.SetAccessRuleProtection($True, $False)
+    # Read the DACL and SACL together so both are updated in a single operation
+    $Acl = Get-Acl -Path $MscepRegistryKey -Audit
 
-        # Replace the inherited SYSTEM (S-1-5-18) and Administrators (S-1-5-32-544) grants with
-        # explicit entries
-        $Acl.AddAccessRule((New-Object System.Security.AccessControl.RegistryAccessRule((New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')), 'FullControl', 'ContainerInherit', 'None', 'Allow')))
-        $Acl.AddAccessRule((New-Object System.Security.AccessControl.RegistryAccessRule((New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')), 'FullControl', 'ContainerInherit', 'None', 'Allow')))
+    # Disable inheritance and discard inherited entries when the ACL is written. PurgeAccessRules
+    # cannot remove inherited entries (preserved copies are only created when the ACL is written),
+    # so preserving inherited entries would leave the broad-read grants in place. Explicit entries
+    # for SYSTEM and Administrators are added below to replace their inherited grants
+    $Acl.SetAccessRuleProtection($True, $False)
 
-        # Mirror explicit application pool identity entries to the gMSA, preserving rights, inheritance,
-        # and propagation so MSCEP subkeys remain covered
-        $AppPoolAces = @($Acl.Access | Where-Object { -not $_.IsInherited -and $_.IdentityReference.Value -eq 'IIS AppPool\SCEP' })
+    # Replace the inherited SYSTEM (S-1-5-18) and Administrators (S-1-5-32-544) grants with
+    # explicit entries
+    $Acl.AddAccessRule((New-Object System.Security.AccessControl.RegistryAccessRule((New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')), 'FullControl', 'ContainerInherit', 'None', 'Allow')))
+    $Acl.AddAccessRule((New-Object System.Security.AccessControl.RegistryAccessRule((New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')), 'FullControl', 'ContainerInherit', 'None', 'Allow')))
 
-        ForEach ($Ace in $AppPoolAces) {
+    # Mirror explicit application pool identity entries to the service account (present in gMSA
+    # deployments), preserving rights, inheritance, and propagation so MSCEP subkeys remain covered
+    $AppPoolAces = @($Acl.Access | Where-Object { -not $_.IsInherited -and $_.IdentityReference.Value -eq 'IIS AppPool\SCEP' })
 
-            $GmsaRule = New-Object System.Security.AccessControl.RegistryAccessRule($ServiceAccountSid, $Ace.RegistryRights, $Ace.InheritanceFlags, $Ace.PropagationFlags, $Ace.AccessControlType)
-            $Acl.AddAccessRule($GmsaRule)
+    ForEach ($Ace in $AppPoolAces) {
 
-        }
+        $ServiceAccountRule = New-Object System.Security.AccessControl.RegistryAccessRule($ServiceAccountSid, $Ace.RegistryRights, $Ace.InheritanceFlags, $Ace.PropagationFlags, $Ace.AccessControlType)
+        $Acl.AddAccessRule($ServiceAccountRule)
 
-        # Ensure the gMSA retains access on reruns where the application pool entries were already
-        # removed by a previous run of this script
-        $SidRules = $Acl.GetAccessRules($True, $False, [System.Security.Principal.SecurityIdentifier])
+    }
 
-        If (-not ($SidRules | Where-Object { $_.IdentityReference -eq $ServiceAccountSid })) {
+    # Ensure the service account retains access when no application pool entries exist (standard
+    # domain service account deployments, or reruns where the entries were already removed by a
+    # previous run of this script)
+    $SidRules = $Acl.GetAccessRules($True, $False, [System.Security.Principal.SecurityIdentifier])
 
-            $GmsaRule = New-Object System.Security.AccessControl.RegistryAccessRule($ServiceAccountSid, 'FullControl', 'ContainerInherit', 'None', 'Allow')
-            $Acl.AddAccessRule($GmsaRule)
+    If (-not ($SidRules | Where-Object { $_.IdentityReference -eq $ServiceAccountSid })) {
 
-        }
+        $ServiceAccountRule = New-Object System.Security.AccessControl.RegistryAccessRule($ServiceAccountSid, 'FullControl', 'ContainerInherit', 'None', 'Allow')
+        $Acl.AddAccessRule($ServiceAccountRule)
 
-        # Remove every explicit entry not belonging to SYSTEM, Administrators, or the gMSA. Sweeping
-        # against an identity allowlist (rather than purging a fixed list of SIDs) also removes the
-        # application pool entries, capability SIDs, CREATOR OWNER, and any leftover entries from
-        # previous runs of this script
-        $AppPoolSid = (New-Object System.Security.Principal.NTAccount('IIS AppPool\SCEP')).Translate([System.Security.Principal.SecurityIdentifier])
-        $AllowedSids = @('S-1-5-18', 'S-1-5-32-544', $ServiceAccountSid.Value)
+    }
 
-        ForEach ($Identity in ($Acl.Access | Where-Object { -not $_.IsInherited } | Select-Object -ExpandProperty IdentityReference -Unique)) {
+    # Remove every explicit entry not belonging to SYSTEM, Administrators, or the service account.
+    # Sweeping against an identity allowlist (rather than purging a fixed list of SIDs) also removes
+    # the application pool entries, capability SIDs, CREATOR OWNER, and any leftover entries from
+    # previous runs of this script
+    $AllowedSids = @('S-1-5-18', 'S-1-5-32-544', $ServiceAccountSid.Value)
 
-            If ($Identity -is [System.Security.Principal.SecurityIdentifier]) {
+    ForEach ($Identity in ($Acl.Access | Where-Object { -not $_.IsInherited } | Select-Object -ExpandProperty IdentityReference -Unique)) {
 
-                $Sid = $Identity
+        If ($Identity -is [System.Security.Principal.SecurityIdentifier]) {
 
-            }
-
-            Else {
-
-                $Sid = $Identity.Translate([System.Security.Principal.SecurityIdentifier])
-
-            }
-
-            If ($AllowedSids -notcontains $Sid.Value) {
-
-                $Acl.PurgeAccessRules($Sid)
-
-            }
+            $Sid = $Identity
 
         }
 
-        # Add an audit rule (SACL) to record successful and failed attempts by any identity to modify
-        # the NDES template configuration (value changes, subkey create/delete, permission or owner
-        # changes). Read operations are not audited to avoid Security log noise
-        $EveryoneSid = New-Object System.Security.Principal.SecurityIdentifier('S-1-1-0')
-        $AuditRule = New-Object System.Security.AccessControl.RegistryAuditRule($EveryoneSid, 'SetValue, CreateSubKey, Delete, ChangePermissions, TakeOwnership', 'ContainerInherit', 'None', 'Success, Failure')
-        $Acl.AddAuditRule($AuditRule)
+        Else {
 
-        Set-Acl -Path $MscepRegistryKey -AclObject $Acl
-        Write-Verbose 'MSCEP registry key permissions restricted and change auditing enabled.'
-
-        # The audit rule is only effective if the Object Access > Registry audit subcategory is enabled.
-        # The subcategory GUID is used for locale independence. Enabling audit policy is deliberately
-        # left to the administrator (typically via Group Policy) rather than changed by this script
-        $AuditPolicy = & auditpol.exe /get /subcategory:"{0CCE921E-69AE-11D9-BED3-505054503030}" /r 2>&1 | ConvertFrom-Csv
-
-        If ($AuditPolicy.'Inclusion Setting' -notmatch 'Success') {
-
-            Write-Warning "The 'Audit Registry' audit subcategory is not enabled. The MSCEP audit rule will not generate Security log events until it is enabled via Group Policy (Advanced Audit Policy Configuration > Object Access > Audit Registry)."
+            $Sid = $Identity.Translate([System.Security.Principal.SecurityIdentifier])
 
         }
 
-        # Update RA certificate private key permissions. The initial NDES configuration granted key
-        # access to the SCEP application pool identity; the application pool now runs as the gMSA.
-        # Skip this update when RemoveLegacyCertificates is specified, as those certificates will be
-        # removed and their replacements enrolled from certificate templates that define gMSA key
-        # permissions
+        If ($AllowedSids -notcontains $Sid.Value) {
+
+            $Acl.PurgeAccessRules($Sid)
+
+        }
+
+    }
+
+    # Add an audit rule (SACL) to record successful and failed attempts by any identity to modify
+    # the NDES template configuration (value changes, subkey create/delete, permission or owner
+    # changes). Read operations are not audited to avoid Security log noise
+    $EveryoneSid = New-Object System.Security.Principal.SecurityIdentifier('S-1-1-0')
+    $AuditRule = New-Object System.Security.AccessControl.RegistryAuditRule($EveryoneSid, 'SetValue, CreateSubKey, Delete, ChangePermissions, TakeOwnership', 'ContainerInherit', 'None', 'Success, Failure')
+    $Acl.AddAuditRule($AuditRule)
+
+    Set-Acl -Path $MscepRegistryKey -AclObject $Acl
+    Write-Verbose 'MSCEP registry key permissions restricted and change auditing enabled.'
+
+    # The audit rule is only effective if the Object Access > Registry audit subcategory is enabled.
+    # The subcategory GUID is used for locale independence. Enabling audit policy is deliberately
+    # left to the administrator (typically via Group Policy) rather than changed by this script
+    $AuditPolicy = & auditpol.exe /get /subcategory:"{0CCE921E-69AE-11D9-BED3-505054503030}" /r 2>&1 | ConvertFrom-Csv
+
+    If ($AuditPolicy.'Inclusion Setting' -notmatch 'Success') {
+
+        Write-Warning "The 'Audit Registry' audit subcategory is not enabled. The MSCEP audit rule will not generate Security log events until it is enabled via Group Policy (Advanced Audit Policy Configuration > Object Access > Audit Registry)."
+
+    }
+
+    # Update RA certificate private key permissions for gMSA deployments. The initial NDES
+    # configuration granted key access to the SCEP application pool identity; the application pool
+    # now runs as the gMSA. Skip this update when RemoveLegacyCertificates is specified, as those
+    # certificates will be removed and their replacements enrolled from certificate templates that
+    # define gMSA key permissions
+    If ($GroupManagedServiceAccount) {
+
         If (-not $RemoveLegacyCertificates) {
 
             Write-Verbose "Updating RA certificate private key permissions for $ServiceAccount..."
+            $AppPoolSid = (New-Object System.Security.Principal.NTAccount('IIS AppPool\SCEP')).Translate([System.Security.Principal.SecurityIdentifier])
             $RaCertificates = @(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object { $_.Subject -match [regex]::Escape($RaName) -and $_.HasPrivateKey })
 
             If ($RaCertificates.Count -eq 0) {
@@ -1018,10 +1027,10 @@ If ($InstallComplete) {
 }
 
 # SIG # Begin signature block
-# MIIk6wYJKoZIhvcNAQcCoIIk3DCCJNgCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# MIIk7AYJKoZIhvcNAQcCoIIk3TCCJNkCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCXQBpC4scn671t
-# 59d91Ci/SzKhoyfW//7j5toYXvAc0KCCH6YwggWNMIIEdaADAgECAhAOmxiO+dAt
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBHmVtA0XJdt1Ws
+# f10cYMQ+LRh7e2K9piKeW4TkiJa7v6CCH6YwggWNMIIEdaADAgECAhAOmxiO+dAt
 # 5+/bUOIIQBhaMA0GCSqGSIb3DQEBDAUAMGUxCzAJBgNVBAYTAlVTMRUwEwYDVQQK
 # EwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xJDAiBgNV
 # BAMTG0RpZ2lDZXJ0IEFzc3VyZWQgSUQgUm9vdCBDQTAeFw0yMjA4MDEwMDAwMDBa
@@ -1190,29 +1199,29 @@ If ($InstallComplete) {
 # cJIFcbojBcxlRcGG0LIhp6GvReQGgMgYxQbV1S3CrWqZzBt1R9xJgKf47CdxVRd/
 # ndUlQ05oxYy2zRWVFjF7mcr4C34Mj3ocCVccAvlKV9jEnstrniLvUxxVZE/rptb7
 # IRE2lskKPIJgbaP5t2nGj/ULLi49xTcBZU8atufk+EMF/cWuiC7POGT75qaL6vdC
-# vHlshtjdNXOCIUjsarfNZzGCBJswggSXAgEBMH0waTELMAkGA1UEBhMCVVMxFzAV
+# vHlshtjdNXOCIUjsarfNZzGCBJwwggSYAgEBMH0waTELMAkGA1UEBhMCVVMxFzAV
 # BgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMUEwPwYDVQQDEzhEaWdpQ2VydCBUcnVzdGVk
 # IEc0IENvZGUgU2lnbmluZyBSU0E0MDk2IFNIQTM4NCAyMDIxIENBMQIQDsYrSCrm
 # UJuvTRscProh/zANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDwbORoqNqH9Qk76MhjAd8G
-# Yx8cIYSpnFpKuwieEbRD1DALBgcqhkjOPQIBBQAERjBEAiA9Uah6NuU66xFao5hS
-# DWqUHHLgdW8KYCqoVs2hl4ecrgIgR4XbZ5VglFguH7w0RhdfLW/UytFUO2Vx3dRt
-# yLTKhe6hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCCAw8CAQEwfTBpMQswCQYDVQQG
-# EwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4xQTA/BgNVBAMTOERpZ2lDZXJ0
-# IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQwOTYgU0hBMjU2IDIwMjUgQ0Ex
-# AhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQCAQUAoGkwGAYJKoZIhvcNAQkD
-# MQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcNMjYwODEyMTgxMjEzWjAvBgkq
-# hkiG9w0BCQQxIgQgaKvqzPd7vx60RF7W+OtqDc2ekGKkQPZ23rz50wDX+GowDQYJ
-# KoZIhvcNAQEBBQAEggIAu5MDwxyPGSmFn8lAgXYX0dlR5xOGkUy0SGMlCVt9v8ic
-# GZw86i2GK24W74eZi0kL08pzbSLuiVsoYlFuQSfpoGYIbM8emhe2XMzQ5iiloAc2
-# bQ5zQD63jIhWMQ0jGsMvpByGeAyW0PzZoHFSYvU5rrQDFh3/sRiyZU8OkgKnpHnu
-# KcdRpNpkZTz0u2dGT9sn+fIjWD5oPoT1F2Tfxo9dD/nnqHnUmqRXO4sLCc7UDlMN
-# JhvjxOuhmxRvKGUHppnbCU03llTDpSEko9CdLZilZQGLLeWV7FFvJqx4pwiWSMIc
-# H8DNzU9o3LYsLm7QdsQXDZ6eKdXqxULLZvPzmmPCkv1k60Q4fgaKLP47O55AoZgc
-# U4L29Y81sIE2b7NPunVOEH6ySZ0gWqd11OZPh3bGiqiQTkWXlfjjUbOiWI1rPATc
-# 8RlHwvDX2t/Zf6nxcQ6HUwLzlb0d92233wwmDnw4GmCdQRqbRUfmeZAoy/cZNTTV
-# xnpOYBzSpQxx3uWIm2WDLOEKXcoToyHY8lc4mc0Dty6hPbGPMXW3cfZJwwZg9FvS
-# N3LAY/FUinFkTmOKWyu/d9eqYL4VuC7h2ZYX6lYzZLcAVqwOv4HKAf4o1LuUa7j5
-# O3LKzcdRHv001TaKLETssZxLFnf81oxmIO3xadF1uGSEA4vkLzWWpiTFpGzm+7g=
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDpdhoFq+fSGvlM1lcDmju3
+# c+yBoeAzuBpVIrxkQrKcZzALBgcqhkjOPQIBBQAERzBFAiA9u3098RAqovk5q38/
+# kycj81y65PKDaWOJsc+Xr4A//QIhAP8Z86fDX7fhcjuVwsBRiyQovCHwAKFp9Zma
+# XZoZIpY7oYIDJjCCAyIGCSqGSIb3DQEJBjGCAxMwggMPAgEBMH0waTELMAkGA1UE
+# BhMCVVMxFzAVBgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMUEwPwYDVQQDEzhEaWdpQ2Vy
+# dCBUcnVzdGVkIEc0IFRpbWVTdGFtcGluZyBSU0E0MDk2IFNIQTI1NiAyMDI1IENB
+# MQIQCoDvGEuN8QWC0cR2p5V0aDANBglghkgBZQMEAgEFAKBpMBgGCSqGSIb3DQEJ
+# AzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTI2MDgxMjIwMzQxNFowLwYJ
+# KoZIhvcNAQkEMSIEIIfFwbtIbzkL2Uwhk39kgg2q+PqbMN4JtfHMODlf2qJNMA0G
+# CSqGSIb3DQEBAQUABIICADNgQpORPmoWKKIXJj7icC5V30EMWNS8NBll7qyArxN5
+# c7jQ4zLWvbYQSirtn4VN9zekzSBzPzvJCM64k5JAxFVF/QCOqDKwP/oylraPmtp5
+# JTuQjN+IfJpxkNq98ZfqtTziq8je7R7Kpm+fLh/k7+AlHBaWsMCVb78yA/mQF3aB
+# CSSrEqXITo4ENc2rYvlzhSeQ5Csx1AxQBKbLLQLkiO+jiwdk6OBvxVouR8ijZtPJ
+# LSq+UZDS4bIOrj31R2JrRSLZuhvHpAgySLhFJWQ5epvbLJ7onK7FJKpdyCQmtpJ6
+# vUyvqR3gjuM4VT4qICM4K/aGZ+WyYToNXOxcwuybUNSTJjBhgpjSnRYY0v+c0mhR
+# VSBBDRRHM83OL1bb24NidUP1sHeHGcj0AYePhFnKCGSTc3LZDbeMXSAj3JVLJPu5
+# VVpiYtE15Gngtmg1wWb8qfYo1GDvhgDivPDjdR0RIjH3qeiUjtlkqhGpLQztzKp+
+# lo+GPsVG+Y3moXlPOYbh94STth3iBZEwJsG2+Gf5gzCXNfmC9IwdKyMckX7KmLxJ
+# c9cdHdzswU+VH0dvYtM5IUKr/7OzFgTLO2sh1oVhkEfIZqF40l04bduyFMgQYTGH
+# 0kA94CAGJGUl2WgNbewk1oKAqxaPOudFkwFK3+4yANoZofimwS9XpCIFWGTH3yGT
 # SIG # End signature block

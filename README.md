@@ -25,7 +25,7 @@ This script automates the end-to-end installation and hardening of NDES, includi
 | `EnrollmentTemplate` | Yes | Template name (not display name) of the NDES certificate template. Alias: `Template` |
 | `Thumbprint` | Yes | Thumbprint of the TLS certificate to bind to the NDES service |
 | `ServiceAccount` | Yes | Service account for the NDES service. Use `domain\username` for a standard domain account (the script prompts for the password and validates it against the domain) or `domain\username$` with `-GroupManagedServiceAccount` for a gMSA |
-| `GroupManagedServiceAccount` | No | Configures the SCEP IIS application pool to use a gMSA. Also restricts permissions on the MSCEP registry key to SYSTEM, Administrators, and the gMSA, enables auditing of configuration changes to that key, and grants the gMSA read access to the RA certificate private keys (see Notes) |
+| `GroupManagedServiceAccount` | No | Configures the SCEP IIS application pool to use a gMSA and grants the gMSA read access to the RA certificate private keys (see Notes) |
 | `Fqdn` | No | Custom FQDN for the NDES service when deployed behind a load balancer |
 | `RemoveLegacyCertificates` | No | Removes any legacy RA certificates issued to the NDES server |
 | `RemoveDefaultTemplates` | No | Unpublishes the default NDES templates (CEPEncryption, EnrollmentAgentOffline, IPSECIntermediateOffline) from the CA |
@@ -46,14 +46,15 @@ This script automates the end-to-end installation and hardening of NDES, includi
 10. Removes the HTTP site binding (if present), disables the IIS default document, and removes the default IIS start page files (attack surface reduction)
 11. Removes the NDES administration page IIS application (if present - attack surface reduction)
 12. Binds the TLS certificate to the Default Web Site
-13. For gMSA deployments: configures the SCEP application pool to run as the gMSA, restricts MSCEP registry key permissions to SYSTEM, Administrators, and the gMSA, enables auditing of changes to that key, and grants the gMSA read access to the RA certificate private keys (skipped when `-RemoveLegacyCertificates` is specified)
-14. Configures the SHA256 hash algorithm for certificate requests (default uses SHA1 which has been deprecated)
-15. Advertises only strong algorithms (SHA-512, SHA-256, and AES) in the SCEP GetCACaps response
-16. Disables IE Enhanced Security Configuration (required for Intune Certificate Connector installation)
-17. Sets an SPN for the custom FQDN (if `-Fqdn` is specified - optional, only required for load-balanced deployments)
-18. Optionally creates a scheduled task for automatic SCEP application pool restart on certificate renewal (when certificate autoenrollment is configured); this also disables overlapped recycling for the SCEP application pool and enables verbose logging for certificate enrollment events
-19. Optionally removes legacy RA certificates (cleanup)
-20. Optionally unpublishes default NDES certificate templates from the CA (attack surface reduction)
+13. For gMSA deployments: configures the SCEP application pool to run as the gMSA and grants the gMSA read access to the RA certificate private keys (skipped when `-RemoveLegacyCertificates` is specified)
+14. Restricts MSCEP registry key permissions to SYSTEM, Administrators, and the NDES service account, and enables auditing of configuration changes to that key
+15. Configures the SHA256 hash algorithm for certificate requests (default uses SHA1 which has been deprecated)
+16. Advertises only strong algorithms (SHA-512, SHA-256, and AES) in the SCEP GetCACaps response
+17. Disables IE Enhanced Security Configuration (required for Intune Certificate Connector installation)
+18. Sets an SPN for the custom FQDN (if `-Fqdn` is specified - optional, only required for load-balanced deployments)
+19. Optionally creates a scheduled task for automatic SCEP application pool restart on certificate renewal (when certificate autoenrollment is configured); this also disables overlapped recycling for the SCEP application pool and enables verbose logging for certificate enrollment events
+20. Optionally removes legacy RA certificates (cleanup)
+21. Optionally unpublishes default NDES certificate templates from the CA (attack surface reduction)
 
 A transcript log is written to `%ProgramData%\RMHCI\PowerShell\` for troubleshooting.
 
@@ -131,11 +132,16 @@ A transcript log is written to `%ProgramData%\RMHCI\PowerShell\` for troubleshoo
 - To remove a failed NDES configuration and start over: `Uninstall-AdcsNetworkDeviceEnrollmentService -Force`
 - The NDES service account must have **Read** and **Enroll** permissions on the enrollment certificate template.
 
+### MSCEP Registry Key Hardening
+
+These protections apply to both standard domain service account and gMSA deployments:
+
+- Permissions on the `HKLM\SOFTWARE\Microsoft\Cryptography\MSCEP` registry key are restricted to SYSTEM, Administrators, and the NDES service account. If the Microsoft Intune Certificate Connector service runs as a custom account instead of SYSTEM, grant that account read access to this registry key manually.
+- Changing the SCEP application pool identity after installation will cause NDES to fail until the registry key permissions are updated.
+- Auditing of configuration changes to the MSCEP registry key is enabled, but Security log events are only generated when the **Audit Registry** subcategory is enabled via Group Policy (Advanced Audit Policy Configuration > Object Access > Audit Registry). The script warns if this subcategory is not enabled.
+
 ### gMSA Deployments
 
-- Permissions on the `HKLM\SOFTWARE\Microsoft\Cryptography\MSCEP` registry key are restricted to SYSTEM, Administrators, and the gMSA. If the Microsoft Intune Certificate Connector service runs as a custom account instead of SYSTEM, grant that account read access to this registry key manually.
-- Reverting the SCEP application pool to its default identity after installation will cause NDES to fail until the registry key permissions are restored.
-- Auditing of configuration changes to the MSCEP registry key is enabled, but Security log events are only generated when the **Audit Registry** subcategory is enabled via Group Policy (Advanced Audit Policy Configuration > Object Access > Audit Registry). The script warns if this subcategory is not enabled.
 - If `-RemoveLegacyCertificates` is not specified, the gMSA is granted read access to the RA certificate private keys. If it is specified, ensure the replacement RA certificates are enrolled from certificate templates that grant the gMSA read access to the private key.
 
 ## Additional Resources
