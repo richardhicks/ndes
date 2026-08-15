@@ -151,7 +151,7 @@ These protections apply to both standard domain service account and gMSA deploym
 
 ## Additional Resources
 
-- [Richard M. Hicks Consulting Blog](https://www.richardhicks.com/)
+- [Richard M. Hicks Consulting Blog](https://directaccess.richardhicks.com/)
 - [NDES GitHub Repository](https://github.com/richardhicks/ndes/)
 
 ## License
