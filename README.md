@@ -1,5 +1,7 @@
 # Install-NdesServer.ps1
 
+[![PowerShell Gallery](https://img.shields.io/badge/PowerShell%20Gallery-Install--NdesServer-blue)](https://www.powershellgallery.com/packages/Install-NdesServer) [![License](https://img.shields.io/badge/License-MIT-green)](https://github.com/richardhicks/ndes/blob/main/LICENSE) [![Version](https://img.shields.io/powershellgallery/v/Install-NdesServer?label=Version&color=brightgreen)](https://www.powershellgallery.com/packages/Install-NdesServer)
+
 Installs and configures the Network Device Enrollment Service (NDES) role on Windows Server to support the Microsoft Intune Certificate Connector.
 
 ## Overview
@@ -44,17 +46,19 @@ This script automates the end-to-end installation and hardening of NDES, includi
 8. Sets the enrollment certificate template for all MSCEP template types
 9. Enables IIS long URL support (registry and IIS request filtering)
 10. Removes the HTTP site binding (if present), disables the IIS default document, and removes the default IIS start page files (attack surface reduction)
-11. Removes the NDES administration page IIS application (if present - attack surface reduction)
-12. Binds the TLS certificate to the Default Web Site
-13. For gMSA deployments: configures the SCEP application pool to run as the gMSA and grants the gMSA read access to the RA certificate private keys (skipped when `-RemoveLegacyCertificates` is specified)
-14. Restricts MSCEP registry key permissions to SYSTEM, Administrators, and the NDES service account, and enables auditing of configuration changes to that key
-15. Configures the SHA256 hash algorithm for certificate requests (default uses SHA1 which has been deprecated)
-16. Advertises only strong algorithms (SHA-512, SHA-256, and AES) in the SCEP GetCACaps response
-17. Disables IE Enhanced Security Configuration (required for Intune Certificate Connector installation)
-18. Sets an SPN for the custom FQDN (if `-Fqdn` is specified - optional, only required for load-balanced deployments)
-19. Optionally creates a scheduled task for automatic SCEP application pool restart on certificate renewal (when certificate autoenrollment is configured); this also disables overlapped recycling for the SCEP application pool and enables verbose logging for certificate enrollment events
-20. Optionally removes legacy RA certificates (cleanup)
-21. Optionally unpublishes default NDES certificate templates from the CA (attack surface reduction)
+11. Removes the NDES administration page IIS application and its orphaned configuration location (if present), and adds an IIS request filtering hidden segment to block requests to the administration page path (attack surface reduction - prevents an NTLM challenge that discloses domain, server, and OS details to unauthenticated clients)
+12. Disables Windows authentication and enables anonymous authentication for the Default Web Site and the SCEP application (see Notes)
+13. Binds the TLS certificate to the Default Web Site
+14. For gMSA deployments: configures the SCEP application pool to run as the gMSA and grants the gMSA read access to the RA certificate private keys (skipped when `-RemoveLegacyCertificates` is specified)
+15. Restricts MSCEP registry key permissions to SYSTEM, Administrators, and the NDES service account, and enables auditing of configuration changes to that key
+16. Configures the SHA256 hash algorithm for certificate requests (default uses SHA1 which has been deprecated)
+17. Advertises only strong algorithms (SHA-512, SHA-256, and AES) in the SCEP GetCACaps response
+18. Disables IE Enhanced Security Configuration (required for Intune Certificate Connector installation)
+19. Sets an SPN for the custom FQDN (if `-Fqdn` is specified - optional, only required for load-balanced deployments)
+20. Optionally creates a scheduled task for automatic SCEP application pool restart on certificate renewal (when certificate autoenrollment is configured); this also disables overlapped recycling for the SCEP application pool and enables verbose logging for certificate enrollment events
+21. Optionally removes legacy RA certificates (cleanup)
+22. Optionally unpublishes default NDES certificate templates from the CA (attack surface reduction)
+23. Restarts IIS so the service comes up in its final configuration (applies the application pool identity change and clears stale MSCEP registry values and removed RA certificates from running worker processes)
 
 A transcript log is written to `%ProgramData%\RMHCI\PowerShell\` for troubleshooting.
 
@@ -131,6 +135,7 @@ A transcript log is written to `%ProgramData%\RMHCI\PowerShell\` for troubleshoo
 - If the installation fails after IIS configuration has been modified, restore the IIS backup with: `& appcmd.exe restore backup <BackupName>`
 - To remove a failed NDES configuration and start over: `Uninstall-AdcsNetworkDeviceEnrollmentService -Force`
 - The NDES service account must have **Read** and **Enroll** permissions on the enrollment certificate template.
+- Windows authentication is disabled (anonymous only) for the entire Default Web Site and the SCEP application. Because of this, the server must be dedicated to NDES and must not host other IIS applications that require authentication.
 
 ### MSCEP Registry Key Hardening
 

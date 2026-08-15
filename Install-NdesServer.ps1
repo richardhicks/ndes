@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 4.2
+.VERSION 4.3
 
 .GUID a52391cf-9c38-4304-8c9b-89f151461f3c
 
@@ -90,6 +90,8 @@
 
     As part of post-installation hardening, permissions on the HKLM\SOFTWARE\Microsoft\Cryptography\MSCEP registry key are restricted to SYSTEM, Administrators, and the NDES service account, and auditing of configuration changes to this key is enabled (Security log events require the 'Audit Registry' subcategory to be enabled via Group Policy). If the Microsoft Intune Certificate Connector service runs as a custom account instead of SYSTEM, grant that account read access to this registry key manually. Note that changing the SCEP application pool identity after installation will cause NDES to fail until the registry key permissions are updated.
 
+    In addition, IIS is hardened by removing the NDES administration page (mscep_admin) IIS application and its orphaned configuration location, adding a request filtering hidden segment to block requests to the administration page path, and disabling Windows authentication (anonymous only) for the Default Web Site and the SCEP application. Because Windows authentication is disabled for the entire site, the server must be dedicated to NDES and must not host other IIS applications that require authentication.
+
     IMPORTANT NOTE: This script is for configuring NDES to support the Microsoft Intune Certificate Connector. Settings configured by this script will not work with other deployment scenarios.
 
 .LINK
@@ -99,9 +101,9 @@
     https://www.richardhicks.com/
 
 .NOTES
-    Version:        4.2
+    Version:        4.3
     Creation Date:  November 29, 2023
-    Last Updated:   August 12, 2026
+    Last Updated:   August 15, 2026
     Author:         Richard Hicks
     Organization:   Richard M. Hicks Consulting, Inc.
     Contact:        rich@richardhicks.com
@@ -729,6 +731,84 @@ public class LsaApi
 
     }
 
+    # Remove the orphaned configuration location for the NDES administration page. Remove-WebApplication deletes the
+    # application definition but leaves the <location> element written by the NDES role configuration. IIS continues to
+    # match the path and applies its windowsAuthentication setting, causing an NTLM challenge that discloses the NetBIOS
+    # domain and computer name, DNS domain name, server FQDN, and OS build to unauthenticated clients
+    If (Get-WebConfigurationLocation -Name 'Default Web Site/CertSrv/mscep_admin' -ErrorAction SilentlyContinue) {
+
+        Write-Verbose 'Removing orphaned configuration location for the NDES administration page...'
+        Remove-WebConfigurationLocation -Name 'Default Web Site/CertSrv/mscep_admin' -Confirm:$False
+
+    }
+
+    Else {
+
+        Write-Verbose 'Orphaned configuration location for the NDES administration page not found. Skipping removal.'
+
+    }
+
+    # Add a request filtering hidden segment for the NDES administration page. Request filtering runs before
+    # authentication, so the request is rejected with HTTP 404.8 and no WWW-Authenticate header is emitted
+    $HiddenSegments = (Get-WebConfiguration -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/security/requestFiltering/hiddenSegments').Collection.segment
+
+    If ($HiddenSegments -notcontains 'mscep_admin') {
+
+        Write-Verbose 'Adding request filtering hidden segment for the NDES administration page...'
+        $HiddenSegmentParams = @{
+
+            PSPath = 'MACHINE/WEBROOT/APPHOST'
+            Filter = 'system.webServer/security/requestFiltering/hiddenSegments'
+            Name   = '.'
+            Value  = @{segment = 'mscep_admin' }
+
+        }
+
+        Add-WebConfigurationProperty @HiddenSegmentParams
+
+    }
+
+    Else {
+
+        Write-Verbose 'Request filtering hidden segment for the NDES administration page already present. Skipping.'
+
+    }
+
+    # Disable Windows authentication and enable anonymous authentication. The SCEP application is anonymous and the
+    # administration page has been removed, so no path on this server requires Windows authentication. The NDES role
+    # configuration writes different authentication settings depending on the service account type, so both are set
+    # explicitly to ensure a consistent result. Both sections are locked at the application level and must be set at
+    # MACHINE/WEBROOT/APPHOST using the Location parameter
+    ForEach ($Location in @('Default Web Site', 'Default Web Site/CertSrv/mscep')) {
+
+        Write-Verbose "Disabling Windows authentication for $Location..."
+        $WindowsAuthParams = @{
+
+            PSPath   = 'MACHINE/WEBROOT/APPHOST'
+            Location = $Location
+            Filter   = 'system.webServer/security/authentication/windowsAuthentication'
+            Name     = 'enabled'
+            Value    = $False
+
+        }
+
+        [void](Set-WebConfigurationProperty @WindowsAuthParams)
+
+        Write-Verbose "Enabling anonymous authentication for $Location..."
+        $AnonymousAuthParams = @{
+
+            PSPath   = 'MACHINE/WEBROOT/APPHOST'
+            Location = $Location
+            Filter   = 'system.webServer/security/authentication/anonymousAuthentication'
+            Name     = 'enabled'
+            Value    = $True
+
+        }
+
+        [void](Set-WebConfigurationProperty @AnonymousAuthParams)
+
+    }
+
     # Check for existing certificate binding in IIS. Filter on the protocol property and pipe the results
     # to Remove-WebBinding for the same reasons noted for the HTTP binding removal above
     $HttpsBindings = Get-WebBinding -Name 'Default Web Site' | Where-Object { $_.protocol -eq 'https' }
@@ -900,10 +980,6 @@ public class LsaApi
 
     }
 
-    # Restart IIS
-    Write-Verbose 'Restarting IIS...'
-    [void](Restart-Service -Name W3SVC -Force)
-
     # Configure the SHA256 hash algorithm for certificate requests
     [void](New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\HashAlgorithm\' -Force)
     [void](New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography\MSCEP\HashAlgorithm\' -PropertyType String -Name HashAlgorithm -Value SHA256 -Force)
@@ -963,7 +1039,7 @@ public class LsaApi
     If ($RemoveLegacyCertificates) {
 
         Write-Verbose 'Removing legacy certificates...'
-        $LegacyCertificates = Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object { $_.Subject -match $RaName }
+        $LegacyCertificates = Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object { $_.Subject -match [regex]::Escape($RaName) }
         ForEach ($LegacyCertificate in $LegacyCertificates) {
 
             Write-Verbose "Removing legacy certificate $($LegacyCertificate.Thumbprint)..."
@@ -990,6 +1066,24 @@ public class LsaApi
         Else {
 
             Write-Verbose 'Default NDES certificate templates (CEPEncryption, EnrollmentAgentOffline, IPSECIntermediateOffline) successfully unpublished from the CA.'
+
+        }
+
+    }
+
+    # Restart IIS so it comes up in its final configuration. This applies the application pool
+    # identity change and ensures no worker process retains stale MSCEP registry values or
+    # removed RA certificates before the required server restart
+    Write-Verbose 'Restarting IIS...'
+    $Result = & iisreset.exe /restart 2>&1
+
+    If ($LASTEXITCODE -ne 0) {
+
+        Write-Warning "IIS restart failed (exit code $LASTEXITCODE). Error: $($Result -join ' ')"
+
+        If ((Get-Service -Name W3SVC).Status -ne 'Running') {
+
+            Write-Warning 'The World Wide Web Publishing Service (W3SVC) is not running. Start IIS manually by running iisreset.exe /start.'
 
         }
 
@@ -1029,8 +1123,8 @@ If ($InstallComplete) {
 # SIG # Begin signature block
 # MIIk7AYJKoZIhvcNAQcCoIIk3TCCJNkCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBHmVtA0XJdt1Ws
-# f10cYMQ+LRh7e2K9piKeW4TkiJa7v6CCH6YwggWNMIIEdaADAgECAhAOmxiO+dAt
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAANhgeeKJTI9h+
+# Sc3TM08o9z8QpQv5gOa5SQ8Ek77pIKCCH6YwggWNMIIEdaADAgECAhAOmxiO+dAt
 # 5+/bUOIIQBhaMA0GCSqGSIb3DQEBDAUAMGUxCzAJBgNVBAYTAlVTMRUwEwYDVQQK
 # EwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xJDAiBgNV
 # BAMTG0RpZ2lDZXJ0IEFzc3VyZWQgSUQgUm9vdCBDQTAeFw0yMjA4MDEwMDAwMDBa
@@ -1204,24 +1298,24 @@ If ($InstallComplete) {
 # IEc0IENvZGUgU2lnbmluZyBSU0E0MDk2IFNIQTM4NCAyMDIxIENBMQIQDsYrSCrm
 # UJuvTRscProh/zANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDpdhoFq+fSGvlM1lcDmju3
-# c+yBoeAzuBpVIrxkQrKcZzALBgcqhkjOPQIBBQAERzBFAiA9u3098RAqovk5q38/
-# kycj81y65PKDaWOJsc+Xr4A//QIhAP8Z86fDX7fhcjuVwsBRiyQovCHwAKFp9Zma
-# XZoZIpY7oYIDJjCCAyIGCSqGSIb3DQEJBjGCAxMwggMPAgEBMH0waTELMAkGA1UE
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCASNQx7RqWAP5o5Kn852H1b
+# MFIP5gjgvABKd/Mh+YePDDALBgcqhkjOPQIBBQAERzBFAiEAgD4yZb6NlXTM/EB6
+# tUDDWNjMEd2+AdFlbq9CkFNJMwcCIEfpcDXsCEcp1rzGLFjj9ftz7sz9Hcpdxeg5
+# Q1L02Kl5oYIDJjCCAyIGCSqGSIb3DQEJBjGCAxMwggMPAgEBMH0waTELMAkGA1UE
 # BhMCVVMxFzAVBgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMUEwPwYDVQQDEzhEaWdpQ2Vy
 # dCBUcnVzdGVkIEc0IFRpbWVTdGFtcGluZyBSU0E0MDk2IFNIQTI1NiAyMDI1IENB
 # MQIQCoDvGEuN8QWC0cR2p5V0aDANBglghkgBZQMEAgEFAKBpMBgGCSqGSIb3DQEJ
-# AzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTI2MDgxMjIwMzQxNFowLwYJ
-# KoZIhvcNAQkEMSIEIIfFwbtIbzkL2Uwhk39kgg2q+PqbMN4JtfHMODlf2qJNMA0G
-# CSqGSIb3DQEBAQUABIICADNgQpORPmoWKKIXJj7icC5V30EMWNS8NBll7qyArxN5
-# c7jQ4zLWvbYQSirtn4VN9zekzSBzPzvJCM64k5JAxFVF/QCOqDKwP/oylraPmtp5
-# JTuQjN+IfJpxkNq98ZfqtTziq8je7R7Kpm+fLh/k7+AlHBaWsMCVb78yA/mQF3aB
-# CSSrEqXITo4ENc2rYvlzhSeQ5Csx1AxQBKbLLQLkiO+jiwdk6OBvxVouR8ijZtPJ
-# LSq+UZDS4bIOrj31R2JrRSLZuhvHpAgySLhFJWQ5epvbLJ7onK7FJKpdyCQmtpJ6
-# vUyvqR3gjuM4VT4qICM4K/aGZ+WyYToNXOxcwuybUNSTJjBhgpjSnRYY0v+c0mhR
-# VSBBDRRHM83OL1bb24NidUP1sHeHGcj0AYePhFnKCGSTc3LZDbeMXSAj3JVLJPu5
-# VVpiYtE15Gngtmg1wWb8qfYo1GDvhgDivPDjdR0RIjH3qeiUjtlkqhGpLQztzKp+
-# lo+GPsVG+Y3moXlPOYbh94STth3iBZEwJsG2+Gf5gzCXNfmC9IwdKyMckX7KmLxJ
-# c9cdHdzswU+VH0dvYtM5IUKr/7OzFgTLO2sh1oVhkEfIZqF40l04bduyFMgQYTGH
-# 0kA94CAGJGUl2WgNbewk1oKAqxaPOudFkwFK3+4yANoZofimwS9XpCIFWGTH3yGT
+# AzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTI2MDgxNTIyNTYxMVowLwYJ
+# KoZIhvcNAQkEMSIEIMXetCFPruvdI6SJSZobOq4ddC73Cf96i+vZNCc5jMsZMA0G
+# CSqGSIb3DQEBAQUABIICAHglTs8qKm/GH+sMeolwP1FP5TVAHS2LAK/D/Yc5rg7z
+# l/qs+a2HcyCRWaK6YSNoankRD9YZ7E20qJo/e7HDSeXiE5ocXecU4vlj84Y+FndO
+# qv1+zn9wldQi6NEraFIwc7/QeKjX3mWIxMdhIvBqEFKiO83/oVmWn+jgfH3mLF/c
+# Xbi1y1y+VQ4amAbQNx0j1+KTBBwfksMfKtd+FCE8o4DySQGIn99HhOnlyKcWuTXp
+# L22JuygOARhRcrM5nEhLYMbFkyru7sHLx5HXjJ4BhUf7c0gimSyVlTbamxn6rHTz
+# gMk6ejNE/kMH+nHSxMhZz0gK9tfrse0ISdJpater3YXa4NaE2yc+UmUWIHQQXmyI
+# nM4WX4/eAkuy2F0tKiOp79HB1oLVIProQMCW0vSpBps3imi55BBO1agg/eigh06a
+# UYXhGmXRsB2MqEQCKX5difYBy3fY1PhJtCcpmpajshH+KBmJtyhIwyMl/uRg9q4N
+# mq5iz5hFicUimdtRp8uwzlia5lNToyrWllwuYRpi9jEj8Nle1uWI6hcTMmHdnQYZ
+# UtcZhmUkOa2XD8SFco7zdLFwXY5I4HmP5irIx5ipO6CuXk5V9ddcxFxX0dxB78/y
+# XXbFY73ZeSh+KKCD8gCZtURGvKDIwv7yWaN7+jfpQlBlOywTqSX/7m2TfIScxveP
 # SIG # End signature block
