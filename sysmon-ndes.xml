@@ -1,0 +1,375 @@
+<!--
+
+    Sysmon configuration - NDES / AD CS certificate infrastructure
+    ==============================================================
+    Purpose : High-signal monitoring of SCEP enrollment configuration,
+              IIS application pool control, RA certificate handling,
+              and credential access on a Network Device Enrollment
+              Service host.
+
+    Scope   : Targeted, not a general enterprise baseline. Intended to
+              run standalone on NDES / AD CS servers, or to be merged
+              into an existing baseline (SwiftOnSecurity, Olaf Hartong
+              sysmon-modular) as an additional rule set.
+
+    Install : sysmon64.exe -accepteula -i sysmon-ndes.xml
+    Update  : sysmon64.exe -c sysmon-ndes.xml
+    Verify  : sysmon64.exe -c
+    Schema  : sysmon64.exe -s      (confirm before deploying)
+
+    Log     : Applications and Services Logs >
+              Microsoft > Windows > Sysmon > Operational
+
+    Notes   : Registry root keys appear abbreviated (HKLM, HKU, HKCR).
+              Rules use "contains" so both native and WOW6432Node
+              paths are captured.
+
+-->
+
+<Sysmon schemaversion="4.90">
+
+    <HashAlgorithms>SHA256</HashAlgorithms>
+    <CheckRevocation>False</CheckRevocation>
+    <DnsLookup>False</DnsLookup>
+    <ArchiveDirectory>Sysmon</ArchiveDirectory>
+
+    <EventFiltering>
+
+        <!-- ============================================================
+             Event 1 - Process Create
+             IIS control, certificate tooling, registry editors, and
+             remote execution surfaces.
+             ============================================================ -->
+        <RuleGroup name="ProcCreate-Include" groupRelation="or">
+            <ProcessCreate onmatch="include">
+
+                <!-- IIS / service control -->
+                <Image condition="end with">\iisreset.exe</Image>
+                <Image condition="end with">\appcmd.exe</Image>
+                <Image condition="end with">\inetmgr.exe</Image>
+                <Image condition="end with">\w3wp.exe</Image>
+                <Image condition="end with">\net.exe</Image>
+                <Image condition="end with">\net1.exe</Image>
+                <Image condition="end with">\sc.exe</Image>
+
+                <!-- Certificate and PKI tooling -->
+                <Image condition="end with">\certutil.exe</Image>
+                <Image condition="end with">\certreq.exe</Image>
+                <Image condition="end with">\certsrv.exe</Image>
+                <Image condition="end with">\certmgr.msc</Image>
+                <Image condition="end with">\pkiview.msc</Image>
+
+                <!-- Registry manipulation -->
+                <Image condition="end with">\reg.exe</Image>
+                <Image condition="end with">\regedit.exe</Image>
+                <Image condition="end with">\regini.exe</Image>
+
+                <!-- Command line references to MSCEP regardless of binary -->
+                <CommandLine condition="contains">MSCEP</CommandLine>
+                <CommandLine condition="contains">mscep</CommandLine>
+                <CommandLine condition="contains">SignatureTemplate</CommandLine>
+                <CommandLine condition="contains">EncryptionTemplate</CommandLine>
+                <CommandLine condition="contains">GeneralPurposeTemplate</CommandLine>
+
+                <!-- Remote execution / lateral movement surfaces -->
+                <Image condition="end with">\psexec.exe</Image>
+                <Image condition="end with">\psexesvc.exe</Image>
+                <Image condition="end with">\wsmprovhost.exe</Image>
+                <Image condition="end with">\winrs.exe</Image>
+                <Image condition="end with">\wmic.exe</Image>
+                <Image condition="end with">\at.exe</Image>
+                <Image condition="end with">\schtasks.exe</Image>
+                <ParentImage condition="end with">\wsmprovhost.exe</ParentImage>
+
+                <!-- Scripting hosts -->
+                <Image condition="end with">\powershell.exe</Image>
+                <Image condition="end with">\pwsh.exe</Image>
+                <Image condition="end with">\cscript.exe</Image>
+                <Image condition="end with">\wscript.exe</Image>
+                <Image condition="end with">\mshta.exe</Image>
+
+                <!-- Anything spawned by the SCEP worker process is
+                     abnormal and worth capturing unconditionally -->
+                <ParentImage condition="end with">\w3wp.exe</ParentImage>
+
+            </ProcessCreate>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 2 - File Create Time changed
+             Timestomping against certificate stores and IIS content.
+             ============================================================ -->
+        <RuleGroup name="FileCreateTime-Include" groupRelation="or">
+            <FileCreateTime onmatch="include">
+                <TargetFilename condition="contains">\certsrv\</TargetFilename>
+                <TargetFilename condition="contains">\inetpub\</TargetFilename>
+                <TargetFilename condition="contains">\Crypto\</TargetFilename>
+            </FileCreateTime>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 3 - Network Connect
+             Scoped tight. NDES servers talk to the CA and to clients;
+             logging everything is noise. Watch outbound from the
+             worker process and from scripting hosts only.
+             ============================================================ -->
+        <RuleGroup name="NetConnect-Include" groupRelation="or">
+            <NetworkConnect onmatch="include">
+                <Image condition="end with">\powershell.exe</Image>
+                <Image condition="end with">\pwsh.exe</Image>
+                <Image condition="end with">\certutil.exe</Image>
+                <Image condition="end with">\cscript.exe</Image>
+                <Image condition="end with">\wscript.exe</Image>
+                <Image condition="end with">\mshta.exe</Image>
+                <Image condition="end with">\bitsadmin.exe</Image>
+                <Image condition="end with">\curl.exe</Image>
+            </NetworkConnect>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 5 - Process Terminate
+             Correlates worker process recycles with the control action
+             that caused them, without depending on WAS logEventOnRecycle.
+             ============================================================ -->
+        <RuleGroup name="ProcTerminate-Include" groupRelation="or">
+            <ProcessTerminate onmatch="include">
+                <Image condition="end with">\w3wp.exe</Image>
+                <Image condition="end with">\certsrv.exe</Image>
+            </ProcessTerminate>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 6 - Driver Load
+             Log everything. Volume is low and the security value on a
+             certificate issuance host is high.
+             ============================================================ -->
+        <RuleGroup name="DriverLoad-Exclude" groupRelation="and">
+            <DriverLoad onmatch="exclude">
+                <Signature condition="contains">Microsoft Windows</Signature>
+                <Signature condition="contains">Microsoft Corporation</Signature>
+            </DriverLoad>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 7 - Image Load
+             Very noisy by default. Restricted to unsigned modules
+             loading into the certificate and IIS processes.
+             ============================================================ -->
+        <RuleGroup name="ImageLoad-Include" groupRelation="and">
+            <ImageLoad onmatch="include">
+                <Image condition="end with">\w3wp.exe</Image>
+                <Signed condition="is">false</Signed>
+            </ImageLoad>
+        </RuleGroup>
+        <RuleGroup name="ImageLoad-Include-CertSvc" groupRelation="and">
+            <ImageLoad onmatch="include">
+                <Image condition="end with">\certsrv.exe</Image>
+                <Signed condition="is">false</Signed>
+            </ImageLoad>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 8 - CreateRemoteThread
+             ============================================================ -->
+        <RuleGroup name="RemoteThread-Exclude" groupRelation="or">
+            <CreateRemoteThread onmatch="exclude">
+                <SourceImage condition="end with">\MsMpEng.exe</SourceImage>
+                <SourceImage condition="is">C:\Windows\System32\wbem\WmiPrvSE.exe</SourceImage>
+                <SourceImage condition="is">C:\Windows\System32\svchost.exe</SourceImage>
+            </CreateRemoteThread>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 9 - RawAccessRead
+             Volume shadow / raw disk reads used to lift private keys
+             or the CA database out from under file locks.
+             ============================================================ -->
+        <RuleGroup name="RawAccess-Exclude" groupRelation="or">
+            <RawAccessRead onmatch="exclude">
+                <Image condition="end with">\wbengine.exe</Image>
+                <Image condition="end with">\vssvc.exe</Image>
+                <Image condition="end with">\defrag.exe</Image>
+            </RawAccessRead>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 10 - Process Access
+             LSASS access. On a host holding RA private keys and a
+             gMSA identity this is the highest-value single rule here.
+             ============================================================ -->
+        <RuleGroup name="ProcAccess-Include" groupRelation="and">
+            <ProcessAccess onmatch="include">
+                <TargetImage condition="end with">\lsass.exe</TargetImage>
+                <GrantedAccess condition="is">0x1410</GrantedAccess>
+            </ProcessAccess>
+        </RuleGroup>
+        <RuleGroup name="ProcAccess-Include-2" groupRelation="and">
+            <ProcessAccess onmatch="include">
+                <TargetImage condition="end with">\lsass.exe</TargetImage>
+                <GrantedAccess condition="is">0x1010</GrantedAccess>
+            </ProcessAccess>
+        </RuleGroup>
+        <RuleGroup name="ProcAccess-Include-3" groupRelation="and">
+            <ProcessAccess onmatch="include">
+                <TargetImage condition="end with">\lsass.exe</TargetImage>
+                <GrantedAccess condition="is">0x1F0FFF</GrantedAccess>
+            </ProcessAccess>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 11 - File Create
+             Certificate stores, private key containers, IIS config,
+             and web root content on the NDES virtual directory.
+             ============================================================ -->
+        <RuleGroup name="FileCreate-Include" groupRelation="or">
+            <FileCreate onmatch="include">
+                <TargetFilename condition="contains">\Crypto\RSA\</TargetFilename>
+                <TargetFilename condition="contains">\Crypto\Keys\</TargetFilename>
+                <TargetFilename condition="contains">\Crypto\PCPKSP\</TargetFilename>
+                <TargetFilename condition="contains">\certsrv\</TargetFilename>
+                <TargetFilename condition="contains">\inetsrv\config\</TargetFilename>
+                <TargetFilename condition="contains">\CertEnroll\</TargetFilename>
+                <TargetFilename condition="contains">\CertSrv\CertEnroll\</TargetFilename>
+                <TargetFilename condition="end with">.pfx</TargetFilename>
+                <TargetFilename condition="end with">.p12</TargetFilename>
+                <TargetFilename condition="end with">.pvk</TargetFilename>
+                <TargetFilename condition="end with">.cer</TargetFilename>
+                <TargetFilename condition="end with">.crt</TargetFilename>
+                <TargetFilename condition="end with">.req</TargetFilename>
+                <TargetFilename condition="end with">.inf</TargetFilename>
+                <TargetFilename condition="end with">.aspx</TargetFilename>
+                <TargetFilename condition="end with">.asmx</TargetFilename>
+                <TargetFilename condition="end with">.ashx</TargetFilename>
+            </FileCreate>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Events 12/13/14 - Registry
+             The core of this configuration. MSCEP template values are
+             the specific concern: they determine what NDES will issue.
+             ============================================================ -->
+        <RuleGroup name="Registry-Include" groupRelation="or">
+            <RegistryEvent onmatch="include">
+
+                <!-- SCEP / NDES configuration, native and WOW64 -->
+                <TargetObject condition="contains">\Cryptography\MSCEP\</TargetObject>
+                <TargetObject condition="end with">\Cryptography\MSCEP</TargetObject>
+
+                <!-- Certificate Services configuration (if co-located) -->
+                <TargetObject condition="contains">\Services\CertSvc\Configuration</TargetObject>
+
+                <!-- Certificate stores and trust anchors -->
+                <TargetObject condition="contains">\SystemCertificates\Root\</TargetObject>
+                <TargetObject condition="contains">\SystemCertificates\CA\</TargetObject>
+                <TargetObject condition="contains">\SystemCertificates\My\</TargetObject>
+                <TargetObject condition="contains">\SystemCertificates\AuthRoot\</TargetObject>
+                <TargetObject condition="contains">\Cryptography\OID\</TargetObject>
+
+                <!-- Cryptographic policy -->
+                <TargetObject condition="contains">\SecurityProviders\SCHANNEL\</TargetObject>
+                <TargetObject condition="contains">\Cryptography\Configuration\SSL\</TargetObject>
+
+                <!-- Kerberos / strong certificate mapping enforcement -->
+                <TargetObject condition="contains">\Services\Kdc\StrongCertificateBindingEnforcement</TargetObject>
+                <TargetObject condition="contains">\Services\Kdc\UseSubjectAltName</TargetObject>
+
+                <!-- IIS service configuration -->
+                <TargetObject condition="contains">\Services\W3SVC\</TargetObject>
+                <TargetObject condition="contains">\Services\WAS\</TargetObject>
+                <TargetObject condition="contains">\InetStp\</TargetObject>
+
+                <!-- Persistence surfaces -->
+                <TargetObject condition="contains">\CurrentVersion\Run</TargetObject>
+                <TargetObject condition="contains">\CurrentVersion\Image File Execution Options\</TargetObject>
+                <TargetObject condition="contains">\Control\Lsa\</TargetObject>
+                <TargetObject condition="contains">\Control\SecurityProviders\WDigest\</TargetObject>
+
+            </RegistryEvent>
+        </RuleGroup>
+
+        <!-- Suppress the highest-volume legitimate writers so the
+             rules above stay readable. Order matters: excludes are
+             evaluated against the included set. -->
+        <RuleGroup name="Registry-Exclude" groupRelation="or">
+            <RegistryEvent onmatch="exclude">
+                <Image condition="end with">\services.exe</Image>
+                <Image condition="end with">\svchost.exe</Image>
+                <Image condition="end with">\TrustedInstaller.exe</Image>
+                <Image condition="end with">\TiWorker.exe</Image>
+                <Image condition="end with">\MsMpEng.exe</Image>
+                <EventType condition="is">CreateKey</EventType>
+            </RegistryEvent>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 15 - File Create Stream Hash
+             Alternate data streams / mark-of-the-web on web content.
+             ============================================================ -->
+        <RuleGroup name="StreamHash-Include" groupRelation="or">
+            <FileCreateStreamHash onmatch="include">
+                <TargetFilename condition="contains">\inetpub\</TargetFilename>
+                <TargetFilename condition="contains">\certsrv\</TargetFilename>
+            </FileCreateStreamHash>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Events 17/18 - Named Pipes
+             Remote execution frameworks and credential tooling.
+             ============================================================ -->
+        <RuleGroup name="Pipe-Include" groupRelation="or">
+            <PipeEvent onmatch="include">
+                <PipeName condition="contains">psexec</PipeName>
+                <PipeName condition="contains">paexec</PipeName>
+                <PipeName condition="contains">remcom</PipeName>
+                <PipeName condition="contains">csexec</PipeName>
+                <PipeName condition="contains">atsvc</PipeName>
+                <PipeName condition="contains">winreg</PipeName>
+                <PipeName condition="contains">svcctl</PipeName>
+            </PipeEvent>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Events 19/20/21 - WMI Persistence
+             Log all. Legitimate volume is near zero.
+             ============================================================ -->
+        <RuleGroup name="Wmi-Include" groupRelation="or">
+            <WmiEvent onmatch="exclude" />
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 23 / 26 - File Delete
+             Deletion of certificates, keys, and IIS logs.
+             ============================================================ -->
+        <RuleGroup name="FileDelete-Include" groupRelation="or">
+            <FileDeleteDetected onmatch="include">
+                <TargetFilename condition="contains">\Crypto\RSA\</TargetFilename>
+                <TargetFilename condition="contains">\Crypto\Keys\</TargetFilename>
+                <TargetFilename condition="contains">\certsrv\</TargetFilename>
+                <TargetFilename condition="contains">\LogFiles\</TargetFilename>
+                <TargetFilename condition="end with">.pfx</TargetFilename>
+                <TargetFilename condition="end with">.evtx</TargetFilename>
+            </FileDeleteDetected>
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 25 - Process Tampering
+             Hollowing / herpaderping. Log all.
+             ============================================================ -->
+        <RuleGroup name="Tampering-Include" groupRelation="or">
+            <ProcessTampering onmatch="exclude" />
+        </RuleGroup>
+
+        <!-- ============================================================
+             Event 27/28 - Executable file block (Sysmon 14+)
+             Detection only, not blocking. Remove if unsupported by
+             your Sysmon version.
+             ============================================================ -->
+        <RuleGroup name="ExeDetect-Include" groupRelation="or">
+            <FileBlockExecutable onmatch="include">
+                <TargetFilename condition="contains">\inetpub\</TargetFilename>
+                <TargetFilename condition="contains">\certsrv\</TargetFilename>
+            </FileBlockExecutable>
+        </RuleGroup>
+
+    </EventFiltering>
+</Sysmon>
